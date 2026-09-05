@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Email Preflight — Overview</title>
+<style>
+  /* Deliberately plain: this document exists to be pasted or imported into Google Docs, and
+     anything beyond basic typography, tables and lists does not survive that trip. */
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    line-height: 1.5;
+    color: #202124;
+    max-width: 46em;
+    margin: 3em auto;
+    padding: 0 1.5em;
+  }
+  h1 {
+    font-size: 24pt;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin-bottom: 0.1em;
+  }
+  h2 {
+    font-size: 15pt;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin-top: 1.8em;
+    margin-bottom: 0.4em;
+    border-bottom: 1px solid #d0d0d0;
+    padding-bottom: 0.2em;
+  }
+  h3 {
+    font-size: 12pt;
+    font-weight: 700;
+    color: #333;
+    margin-top: 1.2em;
+    margin-bottom: 0.3em;
+  }
+  .subtitle {
+    font-size: 13pt;
+    color: #5f6368;
+    margin-top: 0;
+  }
+  .meta {
+    font-size: 9.5pt;
+    color: #80868b;
+    margin-top: 0.5em;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.8em 0 1em 0;
+    font-size: 10.5pt;
+  }
+  th, td {
+    border: 1px solid #c4c7c5;
+    padding: 7px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background-color: #f1f3f4;
+    font-weight: 700;
+  }
+  ul, ol { margin: 0.5em 0 1em 0; padding-left: 1.6em; }
+  li { margin-bottom: 0.35em; }
+  p { margin: 0.6em 0; }
+  .callout {
+    border: 1px solid #c4c7c5;
+    background-color: #f8f9fa;
+    padding: 10px 14px;
+    margin: 1em 0;
+  }
+  .sev-error   { background-color: #fce8e6; font-weight: 700; }
+  .sev-warning { background-color: #fef7e0; font-weight: 700; }
+  .sev-note    { background-color: #f1f3f4; font-weight: 700; }
+  .footer {
+    margin-top: 2.5em;
+    padding-top: 1em;
+    border-top: 1px solid #d0d0d0;
+    font-size: 10pt;
+    color: #5f6368;
+  }
+</style>
+</head>
+<body>
+
+<h1>Email Preflight</h1>
+<p class="subtitle">Pre-send checks for Marketing Cloud Next emails</p>
+<p class="meta">Created by Saksham Mathur &nbsp;|&nbsp; Last updated: September 2026</p>
+
+<p>Email Preflight is a panel that lives inside the Marketing Cloud Next email builder. Open it while
+you are working on an email and it reads what you have open, then lists what looks wrong — a missing
+subject line, a button with no link, an image with no alt text, columns that will not stack on a
+phone, and around eighty other things. It also gives whoever is doing QA a place to check the email
+against the copy deck.</p>
+
+<div class="callout">
+  <strong>It only reads.</strong> The panel can never change your email. The worst it can do is
+  report something that turns out to be fine.
+</div>
+
+<h2>Why it exists</h2>
+
+<p>Marketing Cloud Next has no validation step before a send. When something is wrong, you find out
+<em>afterwards</em> — as a row on the Email Engagement data model object saying "Failed to render due
+to syntax errors" or "Data graph doesn't contain valid personalization information". By that point
+the send is spent and the audience already has the broken email.</p>
+
+<p>Most of those failures are visible in the email beforehand. So are the ordinary mistakes that come
+from building a new email by copying an old one: a link nobody updated, placeholder copy left behind,
+a subject line still saying "TEST:".</p>
+
+<p>Checking all of that by hand is slow and easy to get wrong — especially when the person doing QA
+is also the person who built the email.</p>
+
+<h2>Opening it</h2>
+
+<ol>
+  <li>Open an email (or a reusable content block) in the Marketing Cloud Next builder.</li>
+  <li>Click the extension panel icon and choose <strong>Email Preflight</strong>.</li>
+  <li>It scans straight away — there is no button to press.</li>
+</ol>
+
+<p>Click <strong>Re-check</strong> after you make a change. The panel has two tabs:
+<strong>Email Issues</strong> and <strong>Email QA</strong>.</p>
+
+<h2>The Email Issues tab</h2>
+
+<p>Everything the tool found, worst first, at three levels:</p>
+
+<table>
+  <tr>
+    <th style="width: 18%;">Level</th>
+    <th>What it means</th>
+    <th style="width: 26%;">What to do</th>
+  </tr>
+  <tr>
+    <td class="sev-error">Error</td>
+    <td>Will break the send, or ship visibly broken</td>
+    <td>Fix before sending</td>
+  </tr>
+  <tr>
+    <td class="sev-warning">Warning</td>
+    <td>Probably wrong, but there are legitimate reasons it might not be</td>
+    <td>Have a look</td>
+  </tr>
+  <tr>
+    <td class="sev-note">Note</td>
+    <td>Worth knowing about. No action implied</td>
+    <td>Read if you have time</td>
+  </tr>
+</table>
+
+<p>The tool never blocks a send. It has no way to.</p>
+
+<h3>Reading the results</h3>
+
+<ul>
+  <li>The counts at the top — <strong>All / Errors / Warnings / Notes</strong> — are also buttons.
+      Click one to show only that level.</li>
+  <li><strong>Where the issues are</strong> is a folded list of the email's sections with a count
+      against each. Click a section to see only its issues. This is there because the main list is
+      sorted by severity, which is right for triage and wrong for repair: nobody fixes an email by
+      severity, they open a section and fix everything in it.</li>
+  <li>Each finding says what is wrong, why it matters, and <em>where</em> it is — "Button 'Learn
+      more' in Section 3 of 6" rather than a component ID.</li>
+  <li>The <strong>−</strong> at the top right of a finding removes it, for the ones you have looked
+      at and decided to live with. A bar appears saying how many you have hidden, with
+      <strong>Restore all</strong> next to it. Hidden findings also drop out of the exports.</li>
+</ul>
+
+<h3>Sharing the results</h3>
+
+<ul>
+  <li><strong>Copy report</strong> gives plain text, for a ticket or a Slack message.</li>
+  <li><strong>Copy for Excel</strong> gives rows that fill the columns when pasted into a
+      spreadsheet — for a QA tracker where someone marks each item resolved.</li>
+</ul>
+
+<p>Both include everything except what you hid, regardless of which filter you happen to be looking
+through at the time.</p>
+
+<h2>The Email QA tab</h2>
+
+<p>For checking an email against what it is <em>supposed</em> to say — the copy deck, the brief, the
+previous version. Paste in what you expect, and the tool tells you whether the email matches.</p>
+
+<table>
+  <tr>
+    <th style="width: 40%;">What you check</th>
+    <th>What you paste in</th>
+  </tr>
+  <tr><td>Subject line</td><td>The approved subject</td></tr>
+  <tr><td>Preheader</td><td>The approved preheader</td></tr>
+  <tr><td>Each link in the email</td><td>The URL that link should point to</td></tr>
+  <tr><td>Each button or link</td><td>The words that should be printed on it</td></tr>
+  <tr><td>Each image</td><td>The file it should be</td></tr>
+  <tr><td>Each image</td><td>Its alt text</td></tr>
+</table>
+
+<p>Links, buttons and images get <strong>one box each</strong>, labelled by where they sit in the
+email, rather than one box for a whole list. You answer one question at a time instead of matching a
+list against a list.</p>
+
+<p>Comparison is exact — but when something does not match, it tells you precisely what differs: a
+curly quote instead of a straight one, a double space, a merge field present on one side and not the
+other. Those are the differences that are near impossible to catch by eye and trivial to catch
+mechanically.</p>
+
+<p>URL comparison ignores tracking parameters, so a link still matches when the spec has a clean URL
+and the email has a tagged one.</p>
+
+<div class="callout">
+  <strong>Blank means skipped, not passed.</strong> A row you left empty never counts itself as one
+  that matched. Nothing you type is written back to the email, and nothing survives a page reload.
+</div>
+
+<h2>What it checks</h2>
+
+<p>Around eighty checks in total. Grouped by area:</p>
+
+<table>
+  <tr>
+    <th style="width: 27%;">Area</th>
+    <th>Examples</th>
+  </tr>
+  <tr>
+    <td><strong>Content basics</strong></td>
+    <td>Missing subject line or preheader; "TEST:", "DRAFT:" or "DO NOT SEND" still in the subject;
+        placeholder copy like "Lorem ipsum" or "Your text here"; <code>[First Name]</code> typed as
+        text instead of wired up as a real merge field</td>
+  </tr>
+  <tr>
+    <td><strong>Links</strong></td>
+    <td>Buttons with no destination at all; <code>#</code> or <code>example.com</code> placeholders;
+        insecure <code>http://</code> links; staging or test URLs; a space inside a URL; two query
+        strings accidentally joined together</td>
+  </tr>
+  <tr>
+    <td><strong>Images</strong></td>
+    <td>An image component placed but never given a picture; missing alt text; alt text that is just
+        a file name; an image-only email with no live text; a logo that does not link anywhere</td>
+  </tr>
+  <tr>
+    <td><strong>Personalization</strong></td>
+    <td>Unclosed <code>{{#if}}</code> or <code>{{#each}}</code>; a <code>{{fallback}}</code> with no
+        backup value; a variable nothing in the email defines; a variable whose capitalisation does
+        not match where it was set; personalization with no data provider attached</td>
+  </tr>
+  <tr>
+    <td><strong>Compliance</strong></td>
+    <td>No unsubscribe link; no preference centre link; no postal address in the footer</td>
+  </tr>
+  <tr>
+    <td><strong>Layout and rendering</strong></td>
+    <td>Columns that do not add up to the grid; rows that will not stack on a phone; left and right
+        padding that do not match; font sizes small enough that phones auto-scale them; line height
+        tight enough that lines collide; images wider than their column</td>
+  </tr>
+  <tr>
+    <td><strong>Mail client support</strong></td>
+    <td><code>display:flex</code> and other web-only layout; downloaded web fonts Outlook will never
+        load; external stylesheets that get stripped; background images Outlook silently drops;
+        buttons built in a way Outlook renders wrong</td>
+  </tr>
+  <tr>
+    <td><strong>Accessibility</strong></td>
+    <td>Text contrast below WCAG AA, with the computed ratio; link text that says nothing ("Click
+        here"); layout tables missing <code>role="presentation"</code></td>
+  </tr>
+  <tr>
+    <td><strong>Dark mode</strong></td>
+    <td>A background colour set with no text colour beside it; pure black and pure white, which dark
+        mode rewrites most aggressively</td>
+  </tr>
+  <tr>
+    <td><strong>Size</strong></td>
+    <td>Content approaching Gmail's clip point, which hides everything below the unsubscribe link;
+        base64 images embedded in the email</td>
+  </tr>
+  <tr>
+    <td><strong>Migrated MCE content</strong></td>
+    <td><code>%%FirstName%%</code> substitution strings and AMPscript URL helpers, which MCN does not
+        evaluate and delivers to the recipient as literal text; hardcoded MCE tracking domains</td>
+  </tr>
+  <tr>
+    <td><strong>Known MCN limitations</strong></td>
+    <td>Repeaters and product recommendations inside reusable content blocks; dynamic content
+        evaluated against the wrong Data Graph. These fail <em>silently</em> — no error, just wrong
+        output</td>
+  </tr>
+</table>
+
+<h2>What it cannot see</h2>
+
+<h3>Content blocks added to the email</h3>
+
+<p>An email stores a <em>pointer</em> to a reusable content block, not a copy of it. So from inside
+the email, the panel cannot read what is in the block. If your unsubscribe link lives in a shared
+footer block, the panel will report it missing.</p>
+
+<p>When it finds one, it says so at the top of the results, names the block, and tells you to check
+it separately. To do that, open the content block on its own and run the panel there. It switches to
+<strong>Content Block Issues</strong> and asks what the block is — header, body or footer — so the
+right checks apply. A footer gets the unsubscribe and postal address checks; a header does not,
+because asking a header for a postal address would be nonsense.</p>
+
+<h3>Templates</h3>
+
+<p>Same reason. Anything inherited from a template is a separate item, and needs checking there.</p>
+
+<h3>How it actually renders</h3>
+
+<p>This is not a rendering test. It reads the content, not the final HTML. It will tell you a font
+size is too small or that Outlook will not load your web font, but it cannot tell you how the email
+actually looks in Outlook. Keep sending a preview.</p>
+
+<h2>If a finding looks wrong</h2>
+
+<p>It happens. Where a check has to guess, it is built to guess towards silence rather than flag
+something that is fine — a working button reported as broken costs the tool its credibility, and
+after two of those nobody reads the panel again. But it reads Marketing Cloud Next's internal content
+structure, and unusual content can be shaped in ways it does not expect.</p>
+
+<p>At the bottom of the Issues tab there is a <strong>Content structure</strong> section with a
+<strong>Copy structure</strong> button. Send that along with the rule ID and what you think it got
+wrong, and the rule can be corrected against real content rather than a guess.</p>
+
+<div class="footer">
+  <p><strong>Built and maintained by Saksham Mathur.</strong> &nbsp;|&nbsp;
+  <strong>Questions and feedback:</strong> [channel or email]</p>
+</div>
+
+</body>
+</html>

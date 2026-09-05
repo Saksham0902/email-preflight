@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>62.0</apiVersion>
+    <isExposed>true</isExposed>
+    <masterLabel>Email Preflight</masterLabel>
+    <!-- Description is capped at 255 characters by the platform — keep it short. -->
+    <description>Read-only pre-send checks for MCN emails and reusable content blocks: Handlebars syntax, unsubscribe link, broken links, missing alt text, undeclared variables, and documented RCB and dynamic-content limitations.</description>
+    <targets>
+        <target>lightning__CmsEditorExtension</target>
+    </targets>
+    <targetConfigs>
+        <targetConfig targets="lightning__CmsEditorExtension">
+            <!-- width="x-large" is beyond the documented small|medium|large enum but the platform
+                 accepts and honors it; fall back to "large" if a future release rejects it. -->
+            <size width="x-large" height="540"></size>
+        </targetConfig>
+    </targetConfigs>
+</LightningComponentBundle>

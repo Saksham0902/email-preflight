@@ -1,0 +1,13 @@
+{
+  "name": "email-preflight",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MCN email-builder sidebar extension that runs pre-send checks on an email or reusable content block. Read-only.",
+  "scripts": {
+    "test:unit": "sfdx-lwc-jest",
+    "test:unit:watch": "sfdx-lwc-jest --watch"
+  },
+  "devDependencies": {
+    "@salesforce/sfdx-lwc-jest": "^5.1.0"
+  }
+}

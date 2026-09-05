@@ -1,0 +1,478 @@
+<template>
+    <!-- max-height (not height) + scrollable_y: only scrolls when the findings list genuinely
+         overflows, so a clean result doesn't show a scrollbar. -->
+    <div class="slds-p-around_medium slds-scrollable_y" style="max-height: 100%;">
+        <template if:true={isLoading}>
+            <lightning-spinner alternative-text="Checking" size="medium"></lightning-spinner>
+        </template>
+
+        <!-- Unsupported content type: nothing to check (panel chrome already shows the title). -->
+        <template if:true={isUnsupported}>
+            <div class="card card_soft card-pad slds-text-body_regular" role="status">
+                <p>{unsupportedMessage}</p>
+            </div>
+        </template>
+
+        <template if:false={isUnsupported}>
+            <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_xx-small">{detectedNote}</p>
+
+            <!-- The documentation, in the panel rather than in a file somebody has to be sent.
+                 Collapsed, because it is read once and then never again — but a reviewer who
+                 inherits an email and finds an unfamiliar panel down the side should not have to
+                 go and ask anyone what it is. -->
+            <details class="about slds-text-body_small slds-m-bottom_small">
+                <summary>About this panel</summary>
+                <div class="card card_soft card-pad slds-m-top_xx-small">
+                    <p>Email Preflight reads the {contentNoun} you have open and reports what looks
+                        wrong, before it is sent. It only reads — it can never change your content,
+                        so the worst it can do is report something that turns out to be fine.</p>
+
+                    <p class="slds-m-top_x-small"><strong>{issuesTabLabel}</strong> is the automatic
+                        scan: around eighty checks covering content, links, images, personalization,
+                        compliance, layout, accessibility and mail-client support.</p>
+
+                    <p class="slds-m-top_x-small"><strong>{qaTabLabel}</strong> is for checking
+                        against a copy deck. Paste in what each piece is supposed to say and it tells
+                        you whether it matches — and exactly what differs when it does not.</p>
+
+                    <p class="slds-m-top_x-small"><strong>Errors</strong> will break the send or ship
+                        visibly broken. <strong>Warnings</strong> are probably wrong, but there are
+                        legitimate reasons they might not be. <strong>Notes</strong> are for
+                        information only. Nothing here blocks a send.</p>
+
+                    <p class="slds-m-top_x-small">Only the item you have open is checked. Templates
+                        and embedded content blocks are separate items — open and check those too.</p>
+
+                    <p class="slds-m-top_x-small slds-text-color_weak">Created by Saksham Mathur.</p>
+                </div>
+            </details>
+
+            <template if:true={errorMessage}>
+                <div class="slds-notify slds-notify_alert slds-alert_error slds-m-bottom_small" role="alert">
+                    <span>{errorMessage}</span>
+                </div>
+            </template>
+
+            <!-- Detection didn't resolve: let the user pick a ruleset rather than leave a dead panel. -->
+            <template if:true={showModeFallback}>
+                <lightning-radio-group name="mode" label="Check this content as" options={modeOptions}
+                    value={manualMode} type="radio" onchange={handleModeChange}
+                    class="slds-m-bottom_small"></lightning-radio-group>
+                <lightning-button variant="brand" label="Check" title="Check this content"
+                    onclick={handleRescan} disabled={isLoading}></lightning-button>
+            </template>
+
+            <lightning-tabset>
+                <!-- Automatic checks: rules the tool carries itself. -->
+                <lightning-tab label={issuesTabLabel} value="preflight">
+                    <!-- A block is a fragment with a job, and the job decides which rules apply.
+                         Nothing in the body reveals it reliably, so the author is asked. Sits above
+                         the results because it changes them. -->
+                    <template if:true={isRcb}>
+                        <div class="card card_soft card-pad slds-m-bottom_small">
+                            <lightning-checkbox-group data-id="block-role" name="blockRole"
+                                label="What is this block used for?" options={blockRoleOptions}
+                                value={blockRoles} onchange={handleBlockRoleChange}></lightning-checkbox-group>
+                            <template if:false={hasBlockRole}>
+                                <p class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small">
+                                    Pick one or more. Choosing Footer switches on the unsubscribe,
+                                    preference centre and postal address checks — this is the only place
+                                    those can be verified, since the tool cannot see in here from an email.
+                                </p>
+                            </template>
+                        </div>
+                    </template>
+
+                    <template if:true={showResults}>
+                        <!-- Pinned above the counts. BLK001 carries the same words, but it is a note
+                             and findings sort errors first, so on a real email it ends up below
+                             twenty other rows and gets missed. -->
+                        <template if:true={hasEmbeddedBlocks}>
+                            <div data-id="block-banner" class="card card_info card-pad slds-m-bottom_small"
+                            role="status">
+                                <p class="slds-text-title_bold">{embeddedBlockHeading}</p>
+                                <ul class="slds-list_dotted slds-text-body_small slds-m-vertical_xx-small">
+                                    <template for:each={embeddedBlockRows} for:item="b">
+                                        <li key={b.key}>
+                                            <strong>{b.title}</strong> — {b.where}
+                                            <template if:true={b.contentKey}>
+                                                <br /><code>{b.contentKey}</code>
+                                            </template>
+                                        </li>
+                                    </template>
+                                </ul>
+                                <p class="slds-text-body_small">
+                                    This panel can only read the email you have open, so nothing inside
+                                    that block was checked. If you need it checked, open the content block
+                                    itself and run this panel there — and ignore any findings below that
+                                    might belong to it, such as a missing unsubscribe link or postal address.
+                                </p>
+                            </div>
+                        </template>
+
+                        <!-- Header row: counts headline + Re-check pinned top-right, so the action
+                             stays visible without scrolling past a long findings list. -->
+                        <div
+                            class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-m-bottom_x-small">
+                            <h3 class="slds-text-heading_small">Results</h3>
+                            <lightning-button variant="neutral" label="Re-check" title="Re-check this content"
+                                onclick={handleRescan} disabled={isLoading}></lightning-button>
+                        </div>
+
+                        <!-- SCANNABLE SUMMARY, and the severity filter. One control, not two: the
+                             count is the label, and clicking it narrows the list below. -->
+                        <div class="counts" role="group" aria-label="Findings by severity — click to filter">
+                            <template for:each={countChips} for:item="c">
+                                <button key={c.key} type="button" class={c.chipClass} data-severity={c.severity}
+                                    title={c.hint} aria-pressed={c.pressed} disabled={c.disabled}
+                                    onclick={handleFilter}>
+                                    <span class={c.numClass}>{c.count}</span>
+                                    <span class="count-label">{c.label}</span>
+                                </button>
+                            </template>
+                        </div>
+
+                        <p class="slds-text-body_small slds-text-color_weak slds-m-vertical_x-small">{statsLine}</p>
+
+                        <template if:true={isClean}>
+                            <div class="card card_ok card-pad" role="status">
+                                <p>Nothing found — this passed every check.</p>
+                            </div>
+                        </template>
+
+                        <!-- Where the issues are, section by section. The findings list below sorts
+                             by severity, which is right for triage and wrong for repair — nobody
+                             fixes an email by severity, they open a section and fix everything in
+                             it. Tapping a row narrows the list to that section. -->
+                        <template if:true={showTree}>
+                            <div class="tree card slds-m-top_x-small">
+                                <!-- Folded by default. It is a navigation aid, and a map you are not
+                                     currently using should not cost you the height of eight rows. -->
+                                <button type="button" class="tree-head" aria-expanded={treeAriaExpanded}
+                                    onclick={handleTreeToggle}>
+                                    <lightning-icon icon-name={treeChevron} size="xx-small"
+                                        alternative-text=""></lightning-icon>
+                                    <span class="tree-title">Where the issues are</span>
+                                    <!-- Folded, this is the only place an active section filter is
+                                         visible. A filter you cannot see is one you cannot undo. -->
+                                    <span class={treeSummaryClass}>{treeSummary}</span>
+                                </button>
+
+                                <template if:true={treeOpen}>
+                                <template for:each={treeRows} for:item="row">
+                                    <div key={row.key} class="tree-line">
+                                        <!-- A block holds no count of its own, so it is a plain row
+                                             rather than a button: there is nothing to filter to. -->
+                                        <template if:true={row.isBlock}>
+                                            <div class="tree-row tree-row_static">
+                                                <lightning-icon icon-name="utility:page" size="xx-small"
+                                                    alternative-text="Embedded block"></lightning-icon>
+                                                <span class="tree-label">
+                                                    {row.label}
+                                                    <span class="tree-sub">Not checked — open this block and run the panel there ({row.blockNote})</span>
+                                                </span>
+                                            </div>
+                                        </template>
+
+                                        <template if:false={row.isBlock}>
+                                            <button type="button" class={row.rowClass}
+                                                data-place={row.filterValue} aria-pressed={row.ariaPressed}
+                                                onclick={handleTreeSelect}>
+                                                <lightning-icon icon-name={row.icon} size="xx-small"
+                                                    alternative-text=""></lightning-icon>
+                                                <span class="tree-label">{row.label}</span>
+                                                <span class={row.pillClass} title={row.countTitle}>{row.countLabel}</span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </template>
+                                <p class="tree-hint">{treeHint}</p>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Findings match nothing under the current filters — not a clean run. -->
+                        <template if:true={isFilteredEmpty}>
+                            <div class="card card_soft card-pad slds-m-top_x-small slds-text-body_small"
+                                role="status">
+                                <p>{filteredEmptyMessage}</p>
+                                <!-- Two filters can combine into an empty list, and working out which
+                                     one to undo is the reader's problem to not have. -->
+                                <lightning-button variant="base" label="Show everything"
+                                    onclick={handleClearFilters} class="slds-m-top_xx-small"></lightning-button>
+                            </div>
+                        </template>
+
+                        <!-- Everything found was dismissed. Not the same as a clean run, and it must
+                             never be allowed to look like one. -->
+                        <template if:true={isAllIgnored}>
+                            <div class="card card_soft card-pad slds-m-top_x-small slds-text-body_small"
+                                role="status">
+                                <p>Every finding here has been ignored. Nothing is left to show, and both
+                                    copy buttons will come back empty.</p>
+                            </div>
+                        </template>
+
+                        <!-- Ignoring is invisible by nature: the evidence of it is an absence. So the
+                             count is stated, with the way back next to it. -->
+                        <template if:true={hasIgnored}>
+                            <div class="ignored-bar card card_soft card-pad slds-m-top_x-small" role="status">
+                                <span class="slds-text-body_small">{ignoredNote}</span>
+                                <lightning-button variant="base" label="Restore all"
+                                    title="Put every ignored issue back in the list"
+                                    onclick={handleRestoreIgnored}></lightning-button>
+                            </div>
+                        </template>
+
+                        <!-- Findings, already sorted most-severe first by the engine. -->
+                        <div class="slds-m-top_small slds-text-body_small">
+                            <template for:each={findingViews} for:item="f">
+                                <div key={f.key} class={f.boxClass}>
+                                    <div class="finding-head">
+                                        <p>
+                                            <strong>{f.badge} · {f.rule}</strong> — <strong>{f.title}</strong>
+                                        </p>
+                                        <!-- Top right, away from the text, so it is never hit while
+                                             reading. Restorable, so a misclick costs nothing. -->
+                                        <lightning-button-icon icon-name="utility:dash" variant="bare"
+                                            size="small" alternative-text={f.ignoreTitle} title={f.ignoreTitle}
+                                            data-id={f.id} onclick={handleIgnore}
+                                            class="finding-ignore"></lightning-button-icon>
+                                    </div>
+                                    <p class="slds-m-top_xx-small">{f.detail}</p>
+                                    <template if:true={f.hasLocations}>
+                                        <ul class="slds-list_dotted slds-m-top_xx-small">
+                                            <template for:each={f.locations} for:item="loc">
+                                                <li key={loc.id}><code>{loc.text}</code></li>
+                                            </template>
+                                        </ul>
+                                        <template if:true={f.hasTruncated}>
+                                            <p class="slds-text-color_weak">{f.truncatedNote}</p>
+                                        </template>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Scope limit is stated on every run, not buried in docs: a "missing
+                             unsubscribe" warning is meaningless without it. -->
+                        <div class="card card_soft card-pad slds-text-body_small slds-m-top_small">
+                            Only what you have open here was checked. Templates and shared blocks are
+                            separate items — open and check those too.
+                        </div>
+
+                        <!-- One click, no expanding: pasting into a ticket is the common case. The
+                             second button is the same findings as spreadsheet rows, for the QA
+                             tracking sheet rather than the ticket. -->
+                        <div class="slds-m-top_small copy-actions">
+                            <lightning-button label={copyButtonLabel} icon-name={copyButtonIcon}
+                                title="Copy the report — includes findings hidden by the current filter, excludes any you ignored"
+                                onclick={handleCopyReport}></lightning-button>
+                            <lightning-button label={copySheetLabel} icon-name={copySheetIcon}
+                                title="Copy the report as spreadsheet rows — paste into Excel or Google Sheets and it fills the columns. Ignored findings are left out."
+                                onclick={handleCopySheet}></lightning-button>
+                        </div>
+
+                        <!-- Same reasoning as the report fallback: this is now the only route out. -->
+                        <template if:true={copySheetFailed}>
+                            <div class="slds-m-top_x-small slds-text-body_small">
+                                <p class="slds-text-color_error" role="alert">
+                                    This editor won't let the panel use the clipboard. Select everything
+                                    in the box below and copy it, then paste into your sheet.
+                                </p>
+                                <lightning-textarea label="Spreadsheet rows" variant="label-hidden" read-only
+                                    value={sheetText} class="slds-m-top_xx-small"></lightning-textarea>
+                            </div>
+                        </template>
+
+                        <!-- Clipboard refused. The textarea is rendered here, outside the collapsed
+                             section below, because it is now the only way to get the text out and
+                             must not sit behind another click. -->
+                        <template if:true={copyFailed}>
+                            <div class="slds-m-top_x-small slds-text-body_small">
+                                <p class="slds-text-color_error" role="alert">
+                                    This editor won't let the panel use the clipboard. Select the text
+                                    below and copy it manually.
+                                </p>
+                                <lightning-textarea label="Preflight report" variant="label-hidden" read-only
+                                    value={reportText} class="slds-m-top_xx-small"></lightning-textarea>
+                            </div>
+                        </template>
+
+                        <template if:false={copyFailed}>
+                            <details class="slds-m-top_x-small slds-text-body_small">
+                                <summary>Report as text</summary>
+                                <lightning-textarea label="Preflight report" variant="label-hidden" read-only
+                                    value={reportText} class="slds-m-top_xx-small"></lightning-textarea>
+                            </details>
+                        </template>
+
+                        <!-- Developer diagnostics. Collapsed, and last, because it is for reporting a
+                             wrong finding back to the maintainer — not part of the report itself. -->
+                        <details class="slds-m-top_xx-small slds-text-body_small">
+                            <summary>Content structure (for reporting an incorrect finding)</summary>
+                            <p class="slds-text-color_weak slds-m-top_xx-small">
+                                Every field path in this content item, with the distinct values found at
+                                each. If a finding above looks wrong, send this with your bug report so
+                                the rule can be corrected against the real structure.
+                            </p>
+                            <lightning-button label={copyShapeLabel} icon-name={copyShapeIcon}
+                                onclick={handleCopyShape} class="slds-m-top_xx-small"></lightning-button>
+                            <lightning-textarea label="Content structure" variant="label-hidden" read-only
+                                value={shapeText} class="slds-m-top_xx-small"></lightning-textarea>
+                        </details>
+                    </template>
+                </lightning-tab>
+
+                <!-- QA: the same content read, compared against what a reviewer says it should
+                     say. Nothing typed here is ever written back to the content item. -->
+                <lightning-tab label={qaTabLabel} value="qa">
+                    <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
+                        Every link, button and image in this {contentNoun} is listed below with what it
+                        currently says. Type what it should say and validate. Anything you leave blank is
+                        skipped, not passed.
+                    </p>
+
+                    <template if:true={qaError}>
+                        <div class="slds-notify slds-notify_alert slds-alert_error slds-m-bottom_small" role="alert">
+                            <span>{qaError}</span>
+                        </div>
+                    </template>
+
+                    <template if:true={hasQaSummary}>
+                        <p class="slds-text-body_small slds-m-bottom_small"><strong>{qaSummary}</strong></p>
+                    </template>
+
+                    <!-- Whole-item fields: the ones that exist exactly once. Each validates on its
+                         own, because re-running everything to see one answer buries it. Empty for a
+                         block — subject and preheader belong to the email, not to a fragment of one —
+                         so the whole section drops out rather than showing unanswerable boxes. -->
+                    <template for:each={qaFields} for:item="f">
+                        <div key={f.id} class="qa-field slds-m-bottom_small">
+                            <template if:true={f.isSingleLine}>
+                                <lightning-input label={f.label} value={f.value} data-field={f.id}
+                                    onchange={handleQaInput}></lightning-input>
+                            </template>
+                            <template if:true={f.isMultiline}>
+                                <lightning-textarea label={f.label} value={f.value} data-field={f.id}
+                                    onchange={handleQaInput}></lightning-textarea>
+                            </template>
+
+                            <div class="slds-m-top_xx-small">
+                                <lightning-button label="Validate" data-field={f.id}
+                                    onclick={handleValidateField}></lightning-button>
+                            </div>
+
+                            <template if:true={f.hasResult}>
+                                <div class="slds-m-top_xx-small slds-text-body_small">
+                                    <template if:true={f.result.skipped}>
+                                        <div class={f.result.boxClass}>
+                                            <p>Nothing typed in this field, so nothing was checked.</p>
+                                        </div>
+                                    </template>
+
+                                    <template if:false={f.result.skipped}>
+                                        <div class={f.result.boxClass}>
+                                            <p><strong>{f.result.badge}</strong></p>
+
+                                            <template if:true={f.result.detail}>
+                                                <p class="slds-m-top_xx-small">{f.result.detail}</p>
+                                            </template>
+
+                                            <template if:true={f.result.showBoth}>
+                                                <p class="slds-m-top_xx-small">You typed:
+                                                    <code>{f.result.expected}</code></p>
+                                                <p>The email has: <code>{f.result.actual}</code></p>
+                                            </template>
+
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <!-- Per-item checks. The panel lists what the content actually contains and asks
+                         what each one should be, rather than asking for a list and guessing which
+                         entry meant which component. All four groups apply to a block as readily as
+                         to an email — a footer has links and images like anything else. -->
+                    <template for:each={qaGroups} for:item="g">
+                        <div key={g.id}>
+                            <!-- Nothing of this kind here: still named, so its absence is a stated
+                                 fact rather than a group the reviewer thinks they missed. -->
+                            <template if:true={g.isEmpty}>
+                                <div class="qa-group-header qa-group-header_static">
+                                    <span class="qa-group-title">{g.title}</span>
+                                    <span class="qa-group-status">{g.empty}</span>
+                                </div>
+                            </template>
+
+                            <template if:false={g.isEmpty}>
+                                <button type="button" class="qa-group-header" data-group={g.id}
+                                    aria-expanded={g.ariaExpanded} onclick={handleToggleGroup}>
+                                    <lightning-icon icon-name={g.chevron} size="xx-small"
+                                        alternative-text=""></lightning-icon>
+                                    <span class="qa-group-title">{g.title}</span>
+                                    <span class={g.statusClass}>{g.status}</span>
+                                </button>
+                            </template>
+
+                            <template if:true={g.isExpanded}>
+                                <template for:each={g.rows} for:item="row">
+                                    <div key={row.key} class="qa-row slds-m-bottom_x-small">
+                                        <p class="slds-text-body_small slds-text-title_bold">{row.label}</p>
+
+                                        <template if:true={row.hasActual}>
+                                            <p class="slds-text-body_small qa-actual"><code>{row.actual}</code></p>
+                                        </template>
+                                        <template if:false={row.hasActual}>
+                                            <p class="slds-text-body_small slds-text-color_weak">(empty)</p>
+                                        </template>
+
+                                        <lightning-input label={row.prompt} value={row.value} data-key={row.key}
+                                            variant="label-hidden" placeholder={row.prompt}
+                                            onchange={handleRowInput}></lightning-input>
+
+                                        <div class="slds-m-top_xx-small">
+                                            <lightning-button label="Validate" data-key={row.key}
+                                                onclick={handleValidateRow}></lightning-button>
+                                        </div>
+
+                                        <template if:true={row.hasResult}>
+                                            <div class="slds-m-top_xx-small slds-text-body_small">
+                                                <template if:true={row.result.skipped}>
+                                                    <div class={row.result.boxClass}>
+                                                        <p>Nothing typed here, so nothing was checked.</p>
+                                                    </div>
+                                                </template>
+                                                <template if:false={row.result.skipped}>
+                                                    <div class={row.result.boxClass}>
+                                                        <p><strong>{row.result.badge}</strong></p>
+                                                        <template if:true={row.result.detail}>
+                                                            <p class="slds-m-top_xx-small">{row.result.detail}</p>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </template>
+                        </div>
+                    </template>
+
+                    <div class="slds-m-top_small">
+                        <lightning-button variant="brand" label="Validate all" onclick={handleValidateAll}
+                            class="slds-m-right_xx-small"></lightning-button>
+                        <lightning-button label="Clear" onclick={handleQaClear}></lightning-button>
+                    </div>
+
+                    <div class="card card_soft card-pad slds-text-body_small slds-m-top_small">
+                        Only what you have open here was checked, same as the {issuesTabLabel} tab.
+                        Anything inside an embedded content block is not visible from here.
+                    </div>
+                </lightning-tab>
+            </lightning-tabset>
+        </template>
+    </div>
+</template>

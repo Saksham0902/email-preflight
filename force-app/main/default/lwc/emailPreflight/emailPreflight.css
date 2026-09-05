@@ -1,0 +1,379 @@
+/* ---- card system ---------------------------------------------------------------
+   Every framed thing in this panel is one of these. Before, the banner, the role picker, the
+   ignored bar, the tree and the scope note each carried their own border, radius and tint, chosen
+   locally and never compared side by side — which is how a panel ends up looking assembled rather
+   than designed. One base plus a tint per role keeps that from happening again. */
+.card {
+    border: 1px solid #dddbda;
+    border-radius: 0.25rem;
+    background: #fff;
+}
+/* Chrome: prompts, notes, scope statements. Recedes so the findings don't compete with it. */
+.card_soft {
+    background: #fafaf9;
+    color: #514f4d;
+}
+/* A notice worth reading before the results, not a defect. The rail marks it as chrome with
+   something to say; a warning tint would put it in competition with the findings it qualifies. */
+.card_info {
+    border-left: 4px solid #0176d3;
+    background: #f3f9ff;
+}
+.card_ok {
+    border-left: 4px solid #2e844a;
+    background: #f2fbf4;
+}
+.card-pad {
+    padding: 0.5rem 0.625rem;
+}
+
+/* The built-in documentation. A summary element is a control, so it has to look like one — the
+   default marker alone is easy to read as decoration and go unclicked. */
+.about summary {
+    cursor: pointer;
+    font-weight: 700;
+    color: #0176d3;
+}
+
+/* ---- severity counts -----------------------------------------------------------
+   Also the severity filter. These were two stacked controls — a bordered table of three numbers and
+   a row of four buttons underneath repeating the same three words. Two rows of severity UI saying
+   the same thing, one of which was not clickable, which is a worse thing to look at than either
+   alone. The number is the count and clicking it filters to that severity. */
+.counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-bottom: 0.5rem;
+}
+.count-chip {
+    flex: 1 1 3.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.375rem 0.25rem;
+    border: 1px solid #dddbda;
+    border-radius: 0.25rem;
+    background: #fff;
+    font: inherit;
+    cursor: pointer;
+}
+.count-chip:hover:not(:disabled) {
+    border-color: #0176d3;
+    background: #f3f9ff;
+}
+/* A severity with nothing in it stays visible rather than disappearing: the zero is a result, and a
+   row that changes width as findings are fixed is harder to read than one that doesn't. */
+.count-chip:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+/* Inset ring rather than a thicker border, so selecting a chip doesn't shift the row by a pixel. */
+.count-chip_on {
+    border-color: #0176d3;
+    background: #eef4ff;
+    box-shadow: inset 0 0 0 1px #0176d3;
+}
+
+.count-num {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+/* Colour is earned by having something in it. A red zero would read as a problem. */
+.count-num_error {
+    color: #ba0517;
+}
+.count-num_warning {
+    color: #8c4b02;
+}
+
+.count-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #706e6b;
+}
+
+/* ---- component tree ------------------------------------------------------------
+   A map of the email, one row per section, with the issue count for each. `overflow: hidden` clips
+   the header's fill to the card's rounded corners. */
+.tree {
+    overflow: hidden;
+}
+
+/* The whole strip is the hit target, not just the chevron — in a sidebar this narrow a small
+   triangle is an unkind thing to ask someone to hit. */
+.tree-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.375rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: none;
+    background: #f3f3f3;
+    border-bottom: 1px solid #dddbda;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.tree-head:hover {
+    background: #eef4ff;
+}
+
+.tree-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.0625em;
+    color: #5c5c5c;
+}
+
+/* Pushed right, quieter than the title: it answers "do I need to open this?" */
+.tree-summary {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: #706e6b;
+}
+/* A section filter is narrowing the list below. Folded, this is the only sign of it, so it is the
+   one thing in this header allowed to shout. */
+.tree-summary_active {
+    color: #0176d3;
+    font-weight: 700;
+}
+
+/* The connector. A single left rule down the rows reads as a tree without needing an elbow per row,
+   which at this width would cost more pixels than it earns. */
+.tree-line {
+    position: relative;
+    padding-left: 0.5rem;
+}
+.tree-line::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid #e5e5e5;
+}
+.tree-line:first-of-type::before {
+    top: 0.5rem;
+}
+.tree-line:last-of-type::before {
+    bottom: calc(100% - 1.125rem);
+}
+
+.tree-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.375rem;
+    width: 100%;
+    padding: 0.4rem 0.5rem 0.4rem 0.75rem;
+    border: none;
+    border-left: 3px solid transparent;
+    background: none;
+    font: inherit;
+    font-size: 0.8125rem;
+    text-align: left;
+    cursor: pointer;
+}
+.tree-row:hover {
+    background: #f3f9ff;
+}
+/* Selected state carries an accent bar as well as a tint: at this size a tint alone is easy to miss,
+   and this row is the reason the list below it is short. */
+.tree-row_selected {
+    background: #eef4ff;
+    border-left-color: #0176d3;
+    font-weight: 700;
+}
+/* A block row is a statement, not a control. It must not invite a click that would do nothing. */
+.tree-row_static {
+    cursor: default;
+    color: #5c5c5c;
+}
+.tree-row_static:hover {
+    background: none;
+}
+
+/* Takes the slack so the pill stays pinned right; wraps rather than truncating, because the few
+   words of the section's own copy are what make it recognisable. */
+.tree-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.tree-sub {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: #706e6b;
+}
+
+/* Fixed minimum width so the counts form a column down the right edge rather than jittering with the
+   length of each label. */
+.tree-pill {
+    flex: 0 0 auto;
+    min-width: 1.75rem;
+    padding: 0 0.375rem;
+    border-radius: 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.25rem;
+    text-align: center;
+}
+.tree-pill_error {
+    background: #ba0517;
+    color: #fff;
+}
+.tree-pill_warning {
+    background: #fe9339;
+    color: #2e2e2e;
+}
+.tree-pill_info {
+    background: #c9c7c5;
+    color: #2e2e2e;
+}
+/* A clean section says "None" quietly. Green would compete with the red rows for attention, and the
+   rows worth looking at are the ones with a number. */
+.tree-pill_clean {
+    background: #f3f3f3;
+    color: #706e6b;
+    font-weight: 400;
+}
+
+.tree-hint {
+    padding: 0.375rem 0.5rem;
+    border-top: 1px solid #e5e5e5;
+    background: #fafaf9;
+    font-size: 0.75rem;
+    color: #706e6b;
+}
+
+/* ---- findings ------------------------------------------------------------------
+   Title on the left, dismiss control pinned right. The title is allowed to grow and wrap; the button
+   is not allowed to shrink, so a long finding title cannot squeeze it into a sliver. */
+.finding-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+.finding-head > p {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+/* Quiet until hovered. It is an escape hatch, not an action being encouraged — and on a red or
+   yellow finding box a full-strength control would compete with the finding itself. */
+.finding-ignore {
+    flex: 0 0 auto;
+    opacity: 0.55;
+}
+.finding-ignore:hover,
+.finding-ignore:focus-within {
+    opacity: 1;
+}
+
+/* The ignored count and the way back, on one line. Wraps rather than truncating: "Restore all" is
+   the recovery path and must never be the thing that gets cut off. */
+.ignored-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+}
+
+/* The two copy buttons. Wrapping rather than shrinking: the panel is a sidebar and "Copied — paste
+   into Excel" is a long label, so on a narrow panel the second button drops to its own line instead
+   of both being squeezed into truncation. */
+.copy-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* ---- QA tab --------------------------------------------------------------------
+   A rule between QA fields, so an input and its result read as one unit rather than the result
+   floating between two fields. */
+.qa-field {
+    border-bottom: 1px solid #e5e5e5;
+    padding-bottom: 0.75rem;
+}
+.qa-field:last-of-type {
+    border-bottom: none;
+}
+
+/* Group header. A full-width row so the whole strip is the hit target, not just the words — in a
+   narrow sidebar a small chevron is an unkind thing to ask someone to hit repeatedly. */
+.qa-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    width: 100%;
+    padding: 0.5rem 0.25rem;
+    margin-top: 0.5rem;
+    border: none;
+    border-top: 1px solid #e5e5e5;
+    background: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.qa-group-header:hover {
+    background: #f3f3f3;
+}
+/* An empty group is not clickable, so it must not look or behave as though it is. */
+.qa-group-header_static {
+    cursor: default;
+}
+.qa-group-header_static:hover {
+    background: none;
+}
+
+.qa-group-title {
+    font-weight: 700;
+}
+
+/* Pushed to the right edge, quieter than the title: it is the answer to "do I need to open this?" */
+.qa-group-status {
+    margin-left: auto;
+    color: #5c5c5c;
+    font-size: 0.75rem;
+    text-align: right;
+}
+.qa-group-status_fail {
+    color: #ba0517;
+    font-weight: 700;
+}
+
+/* One item found in the email, indented under its group so a long list still reads as a list. */
+.qa-row {
+    border-left: 3px solid #dddbda;
+    padding: 0.25rem 0 0.5rem 0.5rem;
+}
+
+/* What the email actually has, shown above the box asking what it should be. Wraps rather than
+   pushing a long URL past the panel edge. */
+.qa-actual code {
+    overflow-wrap: anywhere;
+}
+
+/* Long URLs and merge-field hrefs must wrap rather than force a horizontal scrollbar on the panel.
+   `anywhere` rather than `break-all` because most locations now read as prose — "Section 3 of 6 —
+   Everything reduced until Sunday" — and break-all would split those mid-word. This wraps at spaces
+   when it can and only breaks inside a token when there is no other way to fit it. */
+code {
+    overflow-wrap: anywhere;
+}
+
+/* Findings and QA results sit on a themed background; keep nested code readable against it rather
+   than inheriting the theme's own code styling. */
+.slds-theme_error code,
+.slds-theme_warning code,
+.slds-theme_success code {
+    background: rgba(255, 255, 255, 0.85);
+    color: #032d60;
+    padding: 0 0.15rem;
+}
