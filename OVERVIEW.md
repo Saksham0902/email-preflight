@@ -1,9 +1,11 @@
 # Email Preflight — Overview
 
-*Draft, 26 Aug 2026 · Saksham Mathur*
+*Updated September 2026 · Saksham Mathur*
 
 A sidebar component for the Marketing Cloud Next email builder that checks an email **before** it is
-sent and reports what it finds.
+sent and reports what it finds. It also checks email templates and reusable content blocks, which
+are where a fault is cheapest to fix — anything wrong in a master template is wrong in every email
+built from it.
 
 ---
 
@@ -26,22 +28,30 @@ under time pressure, on the tenth email of the day.
 
 ## What it is
 
-A read-only panel inside the email builder, reached through the 🧩 toolbox. It reads the email you
+A read-only panel inside the email builder, reached through the 🧩 toolbox. It reads whatever you
 have open and reports on it. It cannot edit your content and cannot block a send — the worst case is
 a wrong report, never a damaged email.
+
+It works on three things, and picks its rules to match: an **email**, an **email template**, or a
+**reusable content block**. A template gets the email rules unchanged, because a template is an email
+layout. A block gets its own set, since a footer has no subject line and asking it for one would be a
+question with no answer.
 
 It has two tabs, which answer two different questions.
 
 | Tab | Question it answers |
 |---|---|
-| **Email Issues** | Is anything wrong with this email? |
-| **Email QA** | Does this email match what the spec says it should be? |
+| **Issues** | Is anything wrong with this? |
+| **QA** | Does it match what the spec says it should be? |
+
+The tabs are named after what is open — *Email Issues*, *Template Issues* or *Content Block Issues* —
+so the panel never claims to be checking something it is not.
 
 ---
 
 ## Tab 1 — Email Issues
 
-Runs **77 checks** across 20 categories as soon as the panel opens. No button to press.
+Runs **86 checks** across 22 categories as soon as the panel opens. No button to press.
 
 ### Three severities
 
@@ -69,6 +79,18 @@ next, which is almost always an accident.
 A finding that says `lightning/section` names a type and leaves you to work out which of six
 sections it means. Instead, every finding is located the way the builder's own Component Tree
 presents it — `Section 3 of 6 — "Everything reduced until Sunday"` — so you can go straight to it.
+
+### It tells you what the email is made of
+
+A folded **Built from** line sits above the results, naming the template the email came from, the
+brand it inherits and the CMS images it places. This is not a check and nothing in it is a problem —
+it is the answer to "what is this actually made of", which the builder never shows in one place and
+which a reviewer generally wants before reading a single finding. A note about the wrong logo means
+very little until you can see which logo is in there.
+
+It also reports whether the template locks anything. A master template that leaves every component
+editable is a starting point rather than a guardrail, and the two look identical from inside the
+builder.
 
 Fix something, hit **Re-check**, and it drops off the list.
 
@@ -118,8 +140,10 @@ Worth being explicit, so nobody assumes a clean report means more than it does.
 - It reads the content, so it cannot tell you whether a well-formed link actually resolves, whether
   an image actually loads, or how any of it renders in Outlook. It flags the known *causes* of
   rendering problems; only a real client or Litmus shows the effect.
-- It only sees the content item you have open. Content living in a shared reusable block or in the
-  template is not visible from the email, and the panel says so rather than implying otherwise.
+- It only sees the content item you have open. Content living in a shared reusable block is not
+  visible from the email, and the panel says so rather than implying otherwise — it names each block
+  so you can open it and run a second pass. Templates used to be in this category and no longer are:
+  open one directly and it gets checked exactly as an email would be.
 - From name, from address and send-time data live on the sending profile and the flow, not in the
   content, so they are outside its reach.
 
@@ -135,7 +159,18 @@ Built with AI assistance.
 
 ## Status and next steps
 
-Deployed and working in a demo org. Presented 26 Aug 2026.
+Deployed and working in a demo org. Presented 26 Aug 2026, and revised since from the first round of
+real use:
+
+- **Alt text held on the CMS image is no longer reported as missing.** This was the worst shape a
+  false positive can take — it fired on the images that *were* correctly described, which is most of
+  them. They are now reported as a note saying where the description lives.
+- **A postal address supplied by a merge field satisfies the compliance check.** Orgs pulling theirs
+  from Company Information were being told they were breaking CAN-SPAM.
+- **Unsubscribe and preference-centre links are recognised however your org writes them**, rather
+  than only in the builder's own token form.
+- **Templates can be opened and checked directly**, which is where a fault is cheapest to fix.
+- **Built from** names the template, brand and images behind whatever you have open.
 
 **The ask:** which of these checks are worth keeping, which are noise, and what is missing? The
 feature set is a starting point drawn from a handful of projects, and the fastest way to make it

@@ -332,7 +332,7 @@ you were given is intact before it goes near an org.</p>
 <pre><code>npm install
 npm run test:unit</code></pre>
 
-<p>You should see <strong>542 passing tests across 3 suites</strong>, in about fifteen seconds. A
+<p>You should see <strong>552 passing tests across 3 suites</strong>, in about fifteen seconds. A
 failure here is a real bug in the rules, not a setup problem — nothing in the suite touches an org,
 so it cannot be caused by anything about your environment or your login.</p>
 
@@ -431,9 +431,11 @@ confusing failure than a line that wraps on screen.</p>
 <h2>Part 2 — Open it in the builder</h2>
 
 <ol>
-  <li>Open an <strong>email</strong> in the Marketing Cloud Next builder. A
-      <strong>reusable content block</strong> works too — the panel notices and switches to
-      block-appropriate checks.</li>
+  <li>Open an <strong>email</strong> in the Marketing Cloud Next builder. An
+      <strong>email template</strong> or a <strong>reusable content block</strong> works too — the
+      panel notices which it is and applies the checks that belong to it. Templates are worth running
+      it on in their own right, since anything wrong in one is wrong in every email built from
+      it.</li>
   <li>Click the <strong>extension panel</strong> icon in the toolbox.</li>
   <li>Choose <strong>Email Preflight</strong>.</li>
 </ol>
@@ -442,7 +444,9 @@ confusing failure than a line that wraps on screen.</p>
 
 <p>Click <strong>Re-check</strong> after you change something. The panel has two tabs —
 <strong>Email Issues</strong> for the automatic scan, and <strong>Email QA</strong> for checking the
-email against a copy deck. Both are covered in the overview document.</p>
+email against a copy deck. Both are covered in the overview document. The tab names follow whatever
+you have open, so on a template they read <strong>Template Issues</strong> and
+<strong>Template QA</strong>.</p>
 
 <div class="callout">
   <strong>Give the first result a sceptical read.</strong> Do the link and image counts match what is
@@ -497,7 +501,8 @@ everything after the deploy.</p>
   </tr>
   <tr>
     <td>The panel says the content type is unsupported</td>
-    <td>Expected. It works on emails and reusable content blocks — not SMS, push or landing pages</td>
+    <td>Expected. It works on emails, email templates and reusable content blocks — not SMS, push or
+        landing pages</td>
   </tr>
   <tr>
     <td>A shared footer block still shows as missing its unsubscribe link</td>

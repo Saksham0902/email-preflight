@@ -1,7 +1,8 @@
 # Email Preflight
 
 A **Marketing Cloud Next (MCN) email-builder sidebar extension** (Lightning Web Component) that
-checks an email or reusable content block **before** it is sent, and reports what it finds.
+checks an email, an email template or a reusable content block **before** it is sent, and reports
+what it finds.
 
 > **Read-only.** The component never calls `updateContent`. It cannot modify your content — the
 > worst case is a wrong report, never a damaged email.
@@ -50,9 +51,9 @@ are delivered to the recipient as literal text (`MIG001`, `MIG002`).
 | `SUB005` | Warning | Preheader repeats the subject — the second line is spent saying nothing new |
 | `SUB003` | Note | Subject has spam-filter triggers (shouting, `!!!`, "FREE") |
 | `SUB004` | Note | `®`/`™`/`©` in the subject — reported to render inconsistently |
-| `CMP001` | Warning | No unsubscribe link in this content item — downgraded to a note when `messagePurpose` is transactional. Recognised three ways: the `{!$link.optout}` token, a URL containing unsubscribe/opt-out, or link wording that says so |
-| `CMP003` | Warning | No postal address in the footer — CAN-SPAM requires one |
-| `CMP002` | Warning | No preference centre link, recognised the same three ways as `CMP001` — without one the only way out is a full unsubscribe, and every unsubscribe costs sender reputation |
+| `CMP001` | Warning | No unsubscribe link in this content item — downgraded to a note when `messagePurpose` is transactional. Recognised four ways: any merge token containing "unsubscribe", a URL containing unsubscribe/opt-out, link wording that says so, or the builder's `{!$link.optout}` |
+| `CMP003` | Warning | No postal address in the footer — CAN-SPAM requires one. Satisfied by a literal address or by a merge field that pulls one in, including camelCase tokens like `{!$brand.postalAddress}` |
+| `CMP002` | Warning | No preference centre link, recognised the same four ways as `CMP001` — without one the only way out is a full unsubscribe, and every unsubscribe costs sender reputation |
 | `BLK001` | Note | Embedded reusable blocks, listed with their location and `contentKey` — their contents were not checked, so compliance findings above may be wrong and the size estimate is low |
 | `LNK001` | Error | Placeholder or empty href (`#`, `example.com`, empty) |
 | `LNK004` | Error | Button or link component with no destination set at all |
@@ -67,6 +68,7 @@ are delivered to the recipient as literal text (`MIG001`, `MIG002`).
 | `IMG002` | Warning | Images but almost no live text — blank when images are blocked, and a spam signal |
 | `IMG003` | Note | Logo doesn't link anywhere — people try clicking it first |
 | `IMG005` | Note | Any other image with no link, so someone can decide whether it needs one |
+| `IMG006` | Note | Images whose alt text lives on the CMS asset rather than in the email — the normal setup, and not readable from here, so it is reported instead of being counted as missing |
 | `A11001` | Warning | Link text that says nothing ("Click here") — screen readers can list links out of context |
 | `A11002` | Warning | Alt text that is a file name or CMS content key rather than a description |
 | `A11003` | Warning | Text-on-background contrast below WCAG AA 4.5:1, with the computed ratio |
@@ -128,6 +130,62 @@ Everything else runs on a block exactly as it does on an email, layout included:
 disagree on side spacing, font and line-height inconsistency), plus the accessibility, dark-mode,
 Outlook and CSS-support rules. A block with columns that do not add up renders just as badly inside
 whatever email pulls it in.
+
+### Three content types
+
+The builder reports what is open through `getContext`, and the panel picks the ruleset to match:
+
+| Open in the builder | Content type | What runs |
+|---|---|---|
+| Email | `sfdc_cms__email` | Every rule |
+| Email template | `sfdc_cms__emailTemplate` | Every rule, unchanged |
+| Reusable content block | `sfdc_cms__emailFragment` | Block rules; `SUB*` and `IMG002` dropped; role picker shown |
+
+A template gets the email ruleset with nothing taken out, because a template is an email layout
+rather than a different kind of object — every rule about links, images, compliance and rendering
+applies to it exactly as it applies to the email it will produce. It is also the cheaper place to
+catch a fault: anything wrong in a master template is wrong in **every** email built from it, so one
+fix there beats the same fix repeated across a quarter of campaigns.
+
+Run against a real org template, this immediately reported two buttons with no link set, two sections
+that will not stack on a phone, and a 94-character URL pasted in as text. Three faults sitting in a
+master template, each one inherited by every email anyone built from it.
+
+Findings name what is actually open rather than always saying "email", via `contentNoun`. The rule
+copy itself is written out longhand across eighty-odd rules and still says "email" in places — a
+wording debt, not a behavioural one.
+
+### What the content is built from
+
+Above the findings sits a folded **Built from** card: the template the email came from, the brand it
+inherits, and the CMS images it places. It is not a check and nothing in it is a problem to be fixed.
+It answers "what is this actually made of", which is the first thing a reviewer asks and the one
+thing the builder never shows in a single place. A finding about the wrong logo means very little
+until you can see which logo is in there.
+
+Everything is reported as a **content key** rather than a name. Resolving a key to its name needs a
+server round trip and this panel deliberately makes none, so a key is genuinely all there is — and it
+is the useful half, since the key is what CMS search matches on and what the content item's export
+folder is named after.
+
+The card is folded by default with the answer carried in its summary line (`Template and brand`,
+`Brand and 9 images`), because the panel lives in a narrow sidebar and most readers only need the
+glance.
+
+Three things worth knowing about what appears there:
+
+- **A template row only appears for content built from a saved template.** The out-of-the-box starter
+  layouts — Gated Content and friends — copy themselves into the email and keep no link back. So an
+  absent template row means "not built from a saved template", never "built from one we could not
+  identify". The two would call for opposite reactions, so the distinction is worth being precise
+  about.
+- **The lock count is reported alongside.** `sfdc_cms:template.attributes.schemaMap` is the template
+  stating, per component, whether an author may edit it. A template that locks nothing is a starting
+  point rather than a guardrail, and the two are indistinguishable in the builder, so the card says
+  so outright: `Nothing locked — all 24 components are editable`.
+- **The brand is either a content key or the org default.** `lightning:brandSource` carries
+  `contentKey` when a brand content item is attached and `defaultBrandOption` when it is not. Both
+  answer "which brand"; only one of them is a thing you can go and open.
 
 ### Block roles
 
@@ -261,9 +319,12 @@ That is the worst failure available to this particular rule. A check that is wro
 requirement is the first one people learn to ignore, and an ignored compliance check is worse than
 no compliance check, because it occupies the space where a working one would go.
 
-It now accepts any of: the token, a link whose URL contains `unsubscribe` / `opt-out`, or a link
-whose visible wording says so. Matching on wording as well as URL matters for tracked links, where
-the URL is an opaque redirect and the anchor text is the only readable signal.
+It now accepts any of: **any merge token containing "unsubscribe"**, a link whose URL contains
+`unsubscribe` / `opt-out`, or a link whose visible wording says so. Matching on wording as well as
+URL matters for tracked links, where the URL is an opaque redirect and the anchor text is the only
+readable signal. Matching any token containing the word — rather than the exact `{!$link.optout}`
+spelling — matters because orgs write these differently and a rule keyed to one org's spelling is a
+rule that fires on everybody else. `CMP002` reads "preference" the same way.
 
 This does nothing for the case where the link is real but sits inside a footer block the tool cannot
 open — see [Scope limit](#-scope-limit--embedded-blocks-and-templates).
@@ -303,6 +364,19 @@ guesses towards silence:
   and completely standard in marketing email in practice; flagging every CTA in every email is how a
   panel gets closed and never reopened. Only text that is *purely* mechanical ("click here", "here",
   "this link") is reported.
+- `IMG001` ignores images whose alt text is held on the **CMS asset** rather than in the email.
+  Ticking "override" in the builder types the alt text into the email, where it lands in `altText`;
+  leaving it unticked — the default — keeps `altText` empty while the real description sits on the
+  image asset, a separate content item this panel cannot read. Matching on `altText` alone therefore
+  reported every correctly-described image in the org as having none, which is the worst shape a
+  false positive can take: it fires on the people who did the accessible thing, and on most of them.
+  Those images are reported as `IMG006` instead, which says where the description actually lives
+  rather than claiming there isn't one.
+- `CMP003` accepts a postal address supplied by a **merge field**, not only a literal one. Plenty of
+  orgs pull theirs from Company Information with `{!$organization.Address}` or
+  `{!$brand.postalAddress}`, and a `\baddress\b` test never matches a camelCase token — so the rule
+  fired on emails that were fully compliant. Tokens are now split on camelCase before being tested,
+  and the test still refuses to read "city" out of "capacity".
 - `A11003` and `DRK001`/`DRK002` only run on colours written as hex. A brand token could evaluate to
   anything, and a contrast failure reported against a colour nobody chose is unfixable noise.
 - `DRK001` further requires the background to be a **literal** colour. Every button the builder makes
@@ -330,9 +404,15 @@ corrected against the real structure instead of another guess.
 
 ## ⚠ Scope limit — embedded blocks and templates
 
-**The tool only sees the content item open in the editor.** Templates and embedded reusable content
-blocks are *separate* content items: the node in the email carries a `contentKey` pointing at them,
-not a copy of their body. Their links, images and footer are invisible from here.
+**The tool only sees the content item open in the editor.** An embedded reusable content block is a
+*separate* content item: the node in the email carries a `contentKey` pointing at it, not a copy of
+its body. Its links, images and footer are invisible from here.
+
+Templates used to sit in the same bucket and no longer do. The builder reports one as
+`sfdc_cms__emailTemplate` and the panel now checks it directly, so a template is a second pass rather
+than a blind spot. What an email still cannot do is check *its own* template in place: the reference
+is readable — see [What the content is built from](#what-the-content-is-built-from) — but the body
+behind it is not. Open the template and run the panel there.
 
 The footer is where this bites, because the footer is both the likeliest thing to be a shared block
 and the place all three compliance rules look. Put your unsubscribe link in a footer block and the
@@ -544,13 +624,16 @@ npm install
 npm run test:unit
 ```
 
-The engine is the thing worth testing; the panel is a thin shell over it.
+552 tests across three suites. The engine is the thing worth testing; the panel is a thin shell over
+it, and its suite exists mainly to compile the template — a broken binding there is otherwise only
+discoverable at deploy time.
 
 ## Status
 
 **Deployed and running; rule set still settling.** The panel works against real content in the MCN
-builder. The Jest suite is written but has **not been executed** — the local shell would not run it —
-so treat green tests as unproven.
+builder, and the Jest suite runs clean — **552 tests across three suites**. (An earlier version of
+this file warned that the tests had never been executed. They have, they pass, and the engine has
+since been run over real org content as well as fixtures.)
 
 ### Confirmed against a real content body
 
@@ -567,6 +650,23 @@ so treat green tests as unproven.
   `attributes.content.definition`, written as `@cms/MCK263AR76UVCFPDIHIXUCFOYMMU`. There is no
   `contentKey` field on the node, which is why an earlier resolver that only knew that name came away
   with nothing.
+
+- The template an email was built from is **`sfdc_cms:template.definition`**, a bare content key
+  sitting beside `sfdc_cms:block` rather than inside it. Next to it,
+  `sfdc_cms:template.attributes.schemaMap` maps every component id to a `readOnly` flag — the
+  template's own statement of what an author may edit.
+- The brand is `lightning:brandSource`, carrying either a `contentKey` or
+  `defaultBrandOption: "sfdcBrand"` when no brand item is attached.
+- A CMS image holds its key at `imageInfo.source.ref.contentKey`; `imageInfo.fileName` is present
+  only sometimes. Alt text typed into the email is `imageInfo.altText`, and
+  `imageInfo.overrideAltText` is `false` when the description lives on the asset instead.
+
+> **The Connect REST API does not return `sfdc_cms:template`.** Fetching a content item through
+> `/services/data/vXX.0/connect/cms/contents/{id}` gives back a body with no template field at all,
+> for emails that demonstrably have one. Sampling saved content through the API therefore suggests
+> the reference is never kept — which is wrong. The editor's own `getContent` does return it, and
+> that is what this panel reads. Recorded here so nobody repeats the experiment and reaches the same
+> wrong conclusion.
 
 Shapes not yet confirmed: `variations` (dynamic content), and the full set of node definitions used
 for block references, of which `BLOCK_REFERENCE` matches the four observed so far. Report anything

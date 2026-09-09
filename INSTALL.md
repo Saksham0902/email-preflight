@@ -1,7 +1,7 @@
 # Install & Setup — Email Preflight
 
-A Marketing Cloud Next email-builder sidebar extension that runs pre-send checks on an email or
-reusable content block. See `README.md` for what it checks and why.
+A Marketing Cloud Next email-builder sidebar extension that runs pre-send checks on an email, an
+email template or a reusable content block. See `README.md` for what it checks and why.
 
 **There is no configuration step.** The component is three LWCs and nothing else — no Apex, no Named
 Credential, no External Credential, no permission set. Deploy it and it works.
@@ -51,14 +51,34 @@ nothing.
 
 ## How to use
 
-1. Open an **email** or a **reusable content block** in the Marketing Cloud Next builder.
+1. Open an **email**, an **email template** or a **reusable content block** in the Marketing Cloud
+   Next builder.
 2. Click the 🧩 panel → **Email Preflight**.
 3. It detects the content type and scans immediately — no button to press.
 4. Read the counts table, then the findings beneath it. **Re-check** re-runs after you make edits.
 5. Use **All / Errors / Warnings / Notes** to narrow the list when there is a lot to work through.
 
-The panel has two tabs. **Email Issues** is the automatic scan described above. **Email QA** is described
-below.
+The panel has two tabs, named after whatever is open — **Email Issues** and **Email QA** on an email,
+**Template Issues** and **Template QA** on a template, **Content Block Issues** and **Content Block
+QA** on a block. The Issues tab is the automatic scan described above. The QA tab is described below.
+
+**Run it on your templates.** A template gets the email ruleset with nothing removed, because a
+template is an email layout. It is also the cheapest place to fix anything, since a fault in a master
+template is repeated in every email built from it. Run against one real org template, this reported
+two buttons with no link set, two sections that would not stack on a phone, and a 94-character URL
+pasted in as text.
+
+### What the content is built from
+
+Above the findings sits a folded **Built from** card naming the template the content came from, the
+brand it inherits and the CMS images it places. It is not a check — it is the answer to "what is this
+made of", which the builder does not show in one place.
+
+Everything there is a **content key** rather than a name. Turning a key into a name needs a server
+call and this panel makes none, so the key is all there is — paste it into CMS search to open the
+item. A template row appears only for content built from a *saved* template; the out-of-the-box
+starter layouts copy themselves in and keep no link back, so no row means "not built from a saved
+template" rather than "we could not tell".
 
 ## The Email QA tab
 
@@ -176,6 +196,10 @@ it. Select all of it, copy, and paste into the sheet — the result is identical
 - **`AMP001` AMPscript detected** — expected if you use Marketing Object lookups or the Smart Block
   canvas-obfuscation pattern.
 - **`IMG001` no alt text** — a purely decorative image correctly has empty alt text.
+- **`IMG006` alt text is set on the image, not in the email** — expected, and usually means the alt
+  text is fine. Leaving "override" unticked is the normal way to work: the description then lives on
+  the image asset in CMS, which is a separate content item the panel cannot read. It is reported so
+  you know it was not verified, rather than being counted as missing.
 
 ## Troubleshooting
 
@@ -183,7 +207,8 @@ it. Select all of it, copy, and paste into the sheet — the result is identical
 |---|---|
 | Panel not listed in the 🧩 menu | Confirm both LWC bundles deployed (Setup → Lightning Components). `preflightEngine` will be listed but never appears in the menu — it is `isExposed` false by design. |
 | "Could not read the editor content" | The editor's content API returned nothing. Close and reopen the content item. |
-| Panel says the content type is unsupported | Expected on SMS, landing pages and anything other than Email / Reusable Content Block. |
+| Panel says the content type is unsupported | Expected on SMS, landing pages and anything other than Email, Email Template or Reusable Content Block. |
+| Panel does not appear when you open a **template** | The component targets `lightning__CmsEditorExtension` with no content-type restriction, so nothing on our side blocks it — but whether MCN offers editor extensions in the template builder is platform behaviour. If the panel is absent there, no code change here fixes it. |
 | A block you embedded still shows as missing its unsubscribe link | Expected. The email stores only a pointer to the block, so its contents are not readable from the email — `BLK001` prints the block's content key; open that block and run the panel on it there. |
 | "This editor won't let the panel use the clipboard" | The builder's frame does not grant clipboard access. The report text appears below the message — select and copy it manually. Nothing is wrong with the scan. |
 | Results look wrong for your content shape | The storage-shape assumptions need confirming against a real content body — see the Status note in `README.md`. Report which rule and what the body actually looks like. |
@@ -192,8 +217,9 @@ it. Select all of it, copy, and paste into the sheet — the result is identical
 
 Add a rule by writing one pure function in `preflightEngine.js` that takes the prepared context and
 returns findings, then appending it to the `CHECKS` array. The context gives you `body`, `title`,
-`strings`, `locatedStrings`, `links`, `anchors`, `images`, `embeddedBlocks`, `isEmail`, `isRcb` and
-the other collected views built at the top of `runPreflight`. Add Jest cases alongside; the engine
+`strings`, `locatedStrings`, `links`, `anchors`, `images`, `embeddedBlocks`, `isEmail`, `isRcb`,
+`isTemplate` and the other collected views built at the top of `runPreflight`. Use `contentNoun(ctx)`
+rather than writing "email" into a finding, so it reads correctly whichever of the three is open. Add Jest cases alongside; the engine
 has no org dependencies, so tests run locally in seconds.
 
 ## Running the tests
@@ -203,7 +229,7 @@ npm install
 npm run test:unit
 ```
 
-542 tests across three suites. `preflightEngine` and `qaCompare` are pure modules tested directly.
+552 tests across three suites. `preflightEngine` and `qaCompare` are pure modules tested directly.
 The `emailPreflight` suite is deliberately thin — it exists mainly to compile the template, since a
 broken binding there is otherwise only discoverable at deploy time. It relies on the stub at
 `force-app/test/jest-mocks/experience/cmsEditorApi.js`, wired up through `moduleNameMapper`, because

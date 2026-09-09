@@ -93,8 +93,12 @@
 <p>Email Preflight is a panel that lives inside the Marketing Cloud Next email builder. Open it while
 you are working on an email and it reads what you have open, then lists what looks wrong — a missing
 subject line, a button with no link, an image with no alt text, columns that will not stack on a
-phone, and around eighty other things. It also gives whoever is doing QA a place to check the email
+phone, and eighty-odd other things. It also gives whoever is doing QA a place to check the email
 against the copy deck.</p>
+
+<p>It works on <strong>emails, email templates and reusable content blocks</strong>. Templates are
+worth running it on in their own right: anything wrong in a master template is wrong in every email
+built from it, so that is the cheapest place to fix it.</p>
 
 <div class="callout">
   <strong>It only reads.</strong> The panel can never change your email. The worst it can do is
@@ -118,13 +122,17 @@ is also the person who built the email.</p>
 <h2>Opening it</h2>
 
 <ol>
-  <li>Open an email (or a reusable content block) in the Marketing Cloud Next builder.</li>
+  <li>Open an email, an email template or a reusable content block in the Marketing Cloud Next
+      builder.</li>
   <li>Click the extension panel icon and choose <strong>Email Preflight</strong>.</li>
   <li>It scans straight away — there is no button to press.</li>
 </ol>
 
-<p>Click <strong>Re-check</strong> after you make a change. The panel has two tabs:
-<strong>Email Issues</strong> and <strong>Email QA</strong>.</p>
+<p>Click <strong>Re-check</strong> after you make a change. The panel has two tabs, named after
+whatever you have open — <strong>Email Issues</strong> and <strong>Email QA</strong> on an email,
+<strong>Template Issues</strong> and <strong>Template QA</strong> on a template, and
+<strong>Content Block Issues</strong> and <strong>Content Block QA</strong> on a block. It never
+claims to be checking something it is not.</p>
 
 <h2>The Email Issues tab</h2>
 
@@ -170,6 +178,23 @@ is also the person who built the email.</p>
       at and decided to live with. A bar appears saying how many you have hidden, with
       <strong>Restore all</strong> next to it. Hidden findings also drop out of the exports.</li>
 </ul>
+
+<h3>What the email is built from</h3>
+
+<p>A folded <strong>Built from</strong> line above the results names the template the email came
+from, the brand it inherits, and the images it places. It is not a check and nothing in it is a
+problem — it is the answer to "what is this actually made of", which the builder never shows in one
+place and which you usually want before reading a single finding. A note about the wrong logo means
+very little until you can see which logo is in there.</p>
+
+<p>It also says whether the template locks anything. A master template that leaves every component
+editable is a starting point rather than a guardrail, and from inside the builder the two look
+identical.</p>
+
+<div class="callout">
+  <strong>These are content keys, not names.</strong> Turning a key into a name would mean the panel
+  calling the server, which it never does. Paste a key into CMS search to open the item it refers to.
+</div>
 
 <h3>Sharing the results</h3>
 
@@ -219,7 +244,7 @@ and the email has a tagged one.</p>
 
 <h2>What it checks</h2>
 
-<p>Around eighty checks in total. Grouped by area:</p>
+<p>86 checks in total. Grouped by area:</p>
 
 <table>
   <tr>
@@ -241,7 +266,9 @@ and the email has a tagged one.</p>
   <tr>
     <td><strong>Images</strong></td>
     <td>An image component placed but never given a picture; missing alt text; alt text that is just
-        a file name; an image-only email with no live text; a logo that does not link anywhere</td>
+        a file name; an image-only email with no live text; a logo that does not link anywhere.
+        Alt text kept on the image in CMS — the normal setup, where "override" is left unticked — is
+        reported separately rather than counted as missing</td>
   </tr>
   <tr>
     <td><strong>Personalization</strong></td>
@@ -251,7 +278,10 @@ and the email has a tagged one.</p>
   </tr>
   <tr>
     <td><strong>Compliance</strong></td>
-    <td>No unsubscribe link; no preference centre link; no postal address in the footer</td>
+    <td>No unsubscribe link; no preference centre link; no postal address in the footer. Each is
+        recognised however your org writes it — the builder's own token, your own linked page, or a
+        link whose wording says so — and an address pulled in by a merge field counts as an
+        address</td>
   </tr>
   <tr>
     <td><strong>Layout and rendering</strong></td>
@@ -307,9 +337,16 @@ it separately. To do that, open the content block on its own and run the panel t
 right checks apply. A footer gets the unsubscribe and postal address checks; a header does not,
 because asking a header for a postal address would be nonsense.</p>
 
-<h3>Templates</h3>
+<h3>Templates — check them directly instead</h3>
 
-<p>Same reason. Anything inherited from a template is a separate item, and needs checking there.</p>
+<p>An email cannot check its own template in place, for the same reason: the template is a separate
+item and its body is not readable from the email. But you no longer have to take that on faith — open
+the template itself in the builder and the panel checks it exactly as it would an email.</p>
+
+<p>This is worth doing on its own schedule, not just when something looks wrong. Run against one real
+template, the panel immediately reported <strong>two buttons with no link set</strong>, two sections
+that would not stack on a phone, and a 94-character web address pasted in as text. Every email built
+from that template inherited all three.</p>
 
 <h3>How it actually renders</h3>
 
