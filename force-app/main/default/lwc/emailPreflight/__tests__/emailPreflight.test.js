@@ -9,6 +9,7 @@
 import { createElement } from 'lwc';
 import EmailPreflight from 'c/emailPreflight';
 import { getContent, getContext } from 'experience/cmsEditorApi';
+import { graphql } from 'lightning/uiGraphQLApi';
 
 const TYPE_EMAIL = 'sfdc_cms__email';
 const TYPE_SMS = 'sfdc_cms__sms';
@@ -27,6 +28,20 @@ function build() {
  */
 const emitContent = (value) => getContent.emit({ data: value, error: undefined });
 const emitContext = (contentTypeFQN) => getContext.emit({ data: { contentTypeFQN }, error: undefined });
+
+/** Answer the name lookup with a key → name map, shaped as the GraphQL wire returns it. */
+const emitNames = (pairs) =>
+    graphql.emit({
+        uiapi: {
+            query: {
+                ManagedContent: {
+                    edges: Object.entries(pairs).map(([key, name]) => ({
+                        node: { ContentKey: { value: key }, Name: { value: name } }
+                    }))
+                }
+            }
+        }
+    });
 
 function content(body, title = 'Test email') {
     return { title, contentBody: body };
@@ -706,6 +721,73 @@ describe('emailPreflight panel', () => {
         await flush();
         expect(el.shadowRoot.querySelector('[data-id="usage"]').textContent)
             .toContain('Nothing locked — all 2 components are editable');
+    });
+
+    // ---- resolving content keys to names ---------------------------------------------
+
+    // A key identifies an item exactly and describes it to nobody. The name is the part a reviewer
+    // can check against a brief, which is the whole reason the card is worth reading.
+    it('shows the name once the lookup answers, with the key kept beside it', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(builtFrom()));
+        await flush();
+        emitNames({ MCLWKQ6FDLB5B2THFCIQLWZVTNKM: 'Email Template_20260322_070533' });
+        await flush();
+        el.shadowRoot.querySelector('[data-id="usage"] button').click();
+        await flush();
+        const card = el.shadowRoot.querySelector('[data-id="usage"]');
+        expect(card.textContent).toContain('Email Template_20260322_070533');
+        expect(card.textContent).toContain('MCLWKQ6FDLB5B2THFCIQLWZVTNKM');
+    });
+
+    // The two tests either side of this one would pass even if the query asked for the wrong keys,
+    // because the test adapter emits whatever it is handed regardless of config. This is the one
+    // that checks the panel actually asked for what it found.
+    it('asks for every key it found, once each', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(builtFrom()));
+        await flush();
+        expect(el).toBeTruthy();
+        expect(graphql.getLastConfig().variables.keys.sort()).toEqual([
+            'MC7SLITDILTVGOBGU47JAPL64BZM',
+            'MCLWKQ6FDLB5B2THFCIQLWZVTNKM'
+        ]);
+    });
+
+    it('does not run a lookup for content that references nothing', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(emailBody([htmlNode('<p>Hello</p>')])));
+        await flush();
+        expect(el).toBeTruthy();
+        expect(graphql.getLastConfig().variables).toBeUndefined();
+    });
+
+    // The panel worked without names before this existed, and the key is still what CMS search
+    // matches on — so a lookup that cannot answer costs the reader nothing.
+    it('falls back to the key when the lookup fails', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(builtFrom()));
+        await flush();
+        graphql.emitErrors([{ message: 'insufficient access' }]);
+        await flush();
+        el.shadowRoot.querySelector('[data-id="usage"] button').click();
+        await flush();
+        expect(el.shadowRoot.querySelector('[data-id="usage"]').textContent)
+            .toContain('MCLWKQ6FDLB5B2THFCIQLWZVTNKM');
+    });
+
+    it('names an embedded block instead of printing its key', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(withBlock()));
+        await flush();
+        emitNames({ MCK263AR76UVCFPDIHIXUCFOYMMU: 'Footer' });
+        await flush();
+        expect(el.shadowRoot.querySelector('[data-id="block-banner"]').textContent).toContain('Footer');
     });
 
     it('shows no card for an email that references nothing', async () => {

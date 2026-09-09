@@ -153,7 +153,10 @@
                                         <div key={row.key} class="tree-line">
                                             <div class="tree-row tree-row_static">
                                                 <span class="tree-label">
-                                                    {row.label}: <code>{row.value}</code>
+                                                    {row.label}: <strong>{row.value}</strong>
+                                                    <template if:true={row.contentKey}>
+                                                        <span class="tree-sub"><code>{row.contentKey}</code></span>
+                                                    </template>
                                                     <template if:true={row.note}>
                                                         <span class="tree-sub">{row.note}</span>
                                                     </template>
@@ -169,9 +172,9 @@
                                                     {usageImagesHeading}
                                                     <template for:each={usageImages} for:item="img">
                                                         <span key={img.key} class="tree-sub">
-                                                            <code>{img.contentKey}</code>
-                                                            <template if:true={img.fileName}>
-                                                                — {img.fileName}
+                                                            {img.title}
+                                                            <template if:true={img.contentKey}>
+                                                                — <code>{img.contentKey}</code>
                                                             </template>
                                                         </span>
                                                     </template>
@@ -181,9 +184,9 @@
                                     </template>
 
                                     <p class="tree-hint">
-                                        These are content keys. Paste one into CMS search to open the item —
-                                        names are not shown because reading them would need a server call,
-                                        and this panel makes none.
+                                        Names are read from CMS. Where only a key is shown, either the lookup
+                                        has not answered or your user cannot read that item — the key works in
+                                        CMS search either way.
                                     </p>
                                 </template>
                             </div>

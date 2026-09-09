@@ -163,10 +163,21 @@ It answers "what is this actually made of", which is the first thing a reviewer 
 thing the builder never shows in a single place. A finding about the wrong logo means very little
 until you can see which logo is in there.
 
-Everything is reported as a **content key** rather than a name. Resolving a key to its name needs a
-server round trip and this panel deliberately makes none, so a key is genuinely all there is — and it
-is the useful half, since the key is what CMS search matches on and what the content item's export
-folder is named after.
+Each item is named, with its **content key** kept beside it. `MCYGXHBGRROJG25GLP4WZDHQWG3Q`
+identifies an image exactly and describes it to nobody; `ODFLLogo` is the part a reviewer can check
+against a brief. The key stays because it is what CMS search matches on and what the content item's
+export folder is named after, so the two do different jobs and neither substitutes for the other.
+
+The names come from a **GraphQL wire** against `ManagedContent`, which is a UI API object — so this
+needs no Apex, no Named Credential and no permission set. That distinction is the whole reason it is
+allowed: the panel avoided server calls not out of squeamishness about reading, but because every
+route to one dragged setup burden along with it, and setup burden is what stops a tool like this
+being adopted. This route has none. It is still read-only.
+
+**A failed lookup costs the reader nothing.** If the wire errors — no access to `ManagedContent`, or
+the adapter unavailable in the editor frame — every caller falls back to the key, which is exactly
+what the card showed before names existed. Nothing is reported about the failure, because an error
+banner about a missing nicety would be competing for attention with actual findings about the email.
 
 The card is folded by default with the answer carried in its summary line (`Template and brand`,
 `Brand and 9 images`), because the panel lives in a narrow sidebar and most readers only need the
@@ -442,21 +453,21 @@ where it will be read. `BLK001` is a note, findings sort errors first, and on a 
 line explaining why the compliance warnings might be wrong lands under twenty other rows — which is
 how somebody concludes the tool is broken rather than partial.
 
-The notice shows a name if the reference carries one, and the content key otherwise. In practice it
-is always the key: every reference observed so far holds nothing but a `@cms/<key>` pointer and a
-type, because the name lives on the content item at the other end and resolving it needs the same
-server call as the content itself. `blockNameOf` checks the fields a name could plausibly sit under
-anyway, so if a future release starts including the title the notice picks it up unchanged. It also
-refuses a key or a UUID found under a `name` field — printing one as though it were a name reads like
-a name and is useless as one.
+The notice names each block. The reference itself never carries a name — every one observed holds
+nothing but a `@cms/<key>` pointer and a type — so the name is read from `ManagedContent` by the same
+GraphQL wire that names the template and the images, and the key is shown beside it. `blockNameOf`
+still checks the fields a name could plausibly sit under, so if a future release starts including the
+title inline the notice uses that without a lookup. It also refuses a key or a UUID found under a
+`name` field: printing one as though it were a name reads like a name and is useless as one.
 
 Together with the role picker this closes most of the practical gap without a callout. The email
 says "there is content in here I did not read, go and open it"; the block, opened, knows what it is
 and runs the rules that belong to it. Two passes instead of one, but nothing is silently unchecked.
 
-Resolving the content automatically would need a server-side callout to the Connect CMS API keyed on
-the `contentKey`. The tool does not do this today — it stays purely client-side, and names its blind
-spot instead.
+Resolving the block's **body** automatically is a different problem from resolving its name. The name
+is a field on `ManagedContent` and the GraphQL wire reads it; the body is not exposed there, and
+getting it means a server-side callout to the Connect CMS API, which means Apex and a Named
+Credential. So the panel names the blind spot precisely, and still does not read into it.
 
 This is not a shortcut. It is a deliberate consequence of MCN keeping blocks reusable rather than
 flattening them into the email that uses them.
@@ -590,6 +601,7 @@ a box to select and copy by hand.
 ```
 LWC emailPreflight   (panel UI + editor read via experience/cmsEditorApi)
         │  getContent / getContext        ← no updateContent, by design
+        │  graphql (lightning/uiGraphQLApi) → ManagedContent names, optional
         ▼
 LWC preflightEngine  (pure, deterministic JS — all rules; Jest-tested)
         │
@@ -601,8 +613,10 @@ LWC preflightEngine  (pure, deterministic JS — all rules; Jest-tested)
   unit tested with Jest. This is where the correctness lives.
 - Every check is an exported pure function taking a prepared context and returning findings, so
   adding a rule means writing one function and appending it to the `CHECKS` array.
-- **No Apex.** Everything is derivable from the content body, which is why this deploys with no org
-  setup at all.
+- **No Apex.** Every *finding* is derivable from the content body alone, which is why this deploys
+  with no org setup at all. The one thing read from the org is the display name behind a content key,
+  through the GraphQL wire — and no finding depends on it, so a lookup that fails costs presentation
+  and nothing else.
 
 ### Why no Apex (and what that costs)
 
@@ -624,14 +638,14 @@ npm install
 npm run test:unit
 ```
 
-552 tests across three suites. The engine is the thing worth testing; the panel is a thin shell over
+557 tests across three suites. The engine is the thing worth testing; the panel is a thin shell over
 it, and its suite exists mainly to compile the template — a broken binding there is otherwise only
 discoverable at deploy time.
 
 ## Status
 
 **Deployed and running; rule set still settling.** The panel works against real content in the MCN
-builder, and the Jest suite runs clean — **552 tests across three suites**. (An earlier version of
+builder, and the Jest suite runs clean — **557 tests across three suites**. (An earlier version of
 this file warned that the tests had never been executed. They have, they pass, and the engine has
 since been run over real org content as well as fixtures.)
 

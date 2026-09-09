@@ -13,6 +13,7 @@
  */
 import { LightningElement, track, wire } from 'lwc';
 import { getContent, getContext } from 'experience/cmsEditorApi';
+import { gql, graphql } from 'lightning/uiGraphQLApi';
 import {
     runPreflight,
     buildTextReport,
@@ -165,6 +166,12 @@ export default class EmailPreflight extends LightningElement {
      */
     @track usageOpen = false;
 
+    /** Content key → name, as the GraphQL wire answers. Stays empty if it cannot. */
+    @track contentNames = {};
+
+    /** Variables for that lookup. Undefined keeps the wire from firing at all. */
+    @track nameQueryVariables;
+
     /** idle → done on a successful copy, or failed when the clipboard is not available to us. */
     @track copyState = COPY_IDLE;
     @track copySheetState = COPY_IDLE;
@@ -210,6 +217,89 @@ export default class EmailPreflight extends LightningElement {
             this.maybeDetectType(data.contentTypeFQN);
             this.maybeAutoScan();
         }
+    }
+
+    /*
+     * Turning content keys into names.
+     *
+     * `MCYGXHBGRROJG25GLP4WZDHQWG3Q` identifies an image perfectly and describes it to nobody. The
+     * name — `ODFLLogo` — is the thing a reviewer can actually check against a brief, so the Built
+     * from card and the embedded-block notice are worth a great deal more once they carry it.
+     *
+     * `ManagedContent` is a UI API object, which means the GraphQL wire can read it with no Apex, no
+     * Named Credential and no permission set. That matters: the reason this panel had no server call
+     * was never squeamishness about reading, it was that every route to it dragged along setup
+     * burden, and setup burden is what stops a tool like this from being adopted. This route has
+     * none.
+     *
+     * Reads only, like everything else here.
+     */
+    @wire(graphql, {
+        query: gql`
+            query ResolveContentNames($keys: [String]) {
+                uiapi {
+                    query {
+                        ManagedContent(where: { ContentKey: { in: $keys } }, first: 100) {
+                            edges {
+                                node {
+                                    ContentKey {
+                                        value
+                                    }
+                                    Name {
+                                        value
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        `,
+        variables: '$nameQueryVariables'
+    })
+    wiredContentNames({ data, errors }) {
+        // Failure is silent on purpose. Every caller falls back to the content key, which is what
+        // was shown before this existed and is still perfectly usable — it is what CMS search
+        // matches on. An error banner would be reporting the absence of a nicety as though it were
+        // a fault in the email, on a panel whose whole job is to report faults in the email.
+        if (errors || !data) return;
+        const edges =
+            (data.uiapi && data.uiapi.query && data.uiapi.query.ManagedContent &&
+                data.uiapi.query.ManagedContent.edges) || [];
+        const names = { ...this.contentNames };
+        for (const edge of edges) {
+            const node = (edge && edge.node) || {};
+            const key = node.ContentKey && node.ContentKey.value;
+            const name = node.Name && node.Name.value;
+            if (key && name) names[key] = name;
+        }
+        this.contentNames = names;
+    }
+
+    /**
+     * Ask for the names behind whatever the last scan found.
+     *
+     * Previously-resolved names are deliberately kept rather than cleared: a re-check nearly always
+     * looks at the same content, and blanking the card back to keys for a moment on every run would
+     * make it flicker for no gain.
+     */
+    refreshContentNames() {
+        const usage = (this.result && this.result.usage) || {};
+        const keys = [
+            usage.template && usage.template.contentKey,
+            usage.brand && usage.brand.contentKey,
+            ...(usage.images || []).map((i) => i.contentKey),
+            ...((this.result && this.result.embeddedBlocks) || []).map((b) => b.contentKey)
+        ].filter((k) => typeof k === 'string' && k !== '');
+
+        const unique = [...new Set(keys)];
+        // Undefined suppresses the wire entirely, rather than firing a query for an empty list.
+        this.nameQueryVariables = unique.length > 0 ? { keys: unique } : undefined;
+    }
+
+    /** The name behind a content key, or '' while it is unresolved or unreadable. */
+    nameFor(contentKey) {
+        return (contentKey && this.contentNames[contentKey]) || '';
     }
 
     maybeDetectType(t) {
@@ -345,15 +435,18 @@ export default class EmailPreflight extends LightningElement {
      */
     get embeddedBlockRows() {
         const blocks = (this.result && this.result.embeddedBlocks) || [];
-        return blocks.map((b, i) => ({
-            key: `${b.contentKey || 'block'}-${i}`,
-            // A name if the reference carried one, otherwise the content key, which is at least
-            // searchable. Never both, and never an empty bullet.
-            title: b.name || b.contentKey || 'Unnamed block',
-            where: b.label,
-            // Only shown when it is not already doing duty as the title.
-            contentKey: b.name && b.contentKey ? b.contentKey : ''
-        }));
+        return blocks.map((b, i) => {
+            // A name if the reference carried one — it almost never does — then the name CMS holds
+            // for that key, and only then the key itself. Never both, and never an empty bullet.
+            const name = b.name || this.nameFor(b.contentKey);
+            return {
+                key: `${b.contentKey || 'block'}-${i}`,
+                title: name || b.contentKey || 'Unnamed block',
+                where: b.label,
+                // Only shown when it is not already doing duty as the title.
+                contentKey: name && b.contentKey ? b.contentKey : ''
+            };
+        });
     }
     get hasEmbeddedBlocks() {
         return !this.isRcb && this.embeddedBlockRows.length > 0;
@@ -387,10 +480,14 @@ export default class EmailPreflight extends LightningElement {
         const rows = [];
         if (usage.template) {
             const { contentKey, locked, components } = usage.template;
+            const name = this.nameFor(contentKey);
             rows.push({
                 key: 'template',
                 label: 'Template',
-                value: contentKey,
+                value: name || contentKey,
+                // Kept beside the name rather than replaced by it: the name is what a reviewer
+                // recognises, the key is what they can search for, and neither substitutes.
+                contentKey: name ? contentKey : '',
                 // A template that locks nothing is a starting point, not a guardrail. Worth saying
                 // plainly to anyone who assumed theirs was protecting the layout.
                 note: components
@@ -402,24 +499,36 @@ export default class EmailPreflight extends LightningElement {
         }
         if (usage.brand) {
             const { contentKey } = usage.brand;
+            const name = this.nameFor(contentKey);
             rows.push({
                 key: 'brand',
                 label: 'Brand',
-                value: contentKey || 'Salesforce default',
+                value: name || contentKey || 'Salesforce default',
+                contentKey: name ? contentKey : '',
                 note: contentKey ? '' : 'No brand content item — the org default is in use'
             });
         }
         return rows;
     }
 
-    /** CMS images placed in the email, by key, with the file name where the reference carries one. */
+    /**
+     * CMS images placed in the email.
+     *
+     * Three things could identify one and they are not equally useful, so they are preferred in the
+     * order a person would recognise them: the item's name in CMS, then the file name the reference
+     * happens to carry, then the key — which identifies the image exactly and describes it to
+     * nobody.
+     */
     get usageImages() {
         const usage = (this.result && this.result.usage) || null;
-        return ((usage && usage.images) || []).map((img) => ({
-            key: img.contentKey,
-            contentKey: img.contentKey,
-            fileName: img.fileName
-        }));
+        return ((usage && usage.images) || []).map((img) => {
+            const title = this.nameFor(img.contentKey) || img.fileName;
+            return {
+                key: img.contentKey,
+                title: title || img.contentKey,
+                contentKey: title ? img.contentKey : ''
+            };
+        });
     }
 
     get hasUsage() {
@@ -1122,6 +1231,7 @@ export default class EmailPreflight extends LightningElement {
                 blockRoles: this.blockRoles
             });
             this.hasRun = true;
+            this.refreshContentNames();
         } catch (e) {
             this.errorMessage = (e && e.message) || 'An unexpected error occurred while checking this content.';
         } finally {

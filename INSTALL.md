@@ -74,11 +74,14 @@ Above the findings sits a folded **Built from** card naming the template the con
 brand it inherits and the CMS images it places. It is not a check — it is the answer to "what is this
 made of", which the builder does not show in one place.
 
-Everything there is a **content key** rather than a name. Turning a key into a name needs a server
-call and this panel makes none, so the key is all there is — paste it into CMS search to open the
-item. A template row appears only for content built from a *saved* template; the out-of-the-box
-starter layouts copy themselves in and keep no link back, so no row means "not built from a saved
-template" rather than "we could not tell".
+Each item is named, with its **content key** beside it — the name is what you check against a brief,
+the key is what CMS search matches on. Names are read from `ManagedContent` through the GraphQL wire,
+which needs no Apex and no permission set of its own; your user does need read access to CMS content.
+If the lookup cannot answer, the card shows keys alone and nothing else changes.
+
+A template row appears only for content built from a *saved* template. The out-of-the-box starter
+layouts copy themselves in and keep no link back, so no row means "not built from a saved template"
+rather than "we could not tell".
 
 ## The Email QA tab
 
@@ -208,6 +211,7 @@ it. Select all of it, copy, and paste into the sheet — the result is identical
 | Panel not listed in the 🧩 menu | Confirm both LWC bundles deployed (Setup → Lightning Components). `preflightEngine` will be listed but never appears in the menu — it is `isExposed` false by design. |
 | "Could not read the editor content" | The editor's content API returned nothing. Close and reopen the content item. |
 | Panel says the content type is unsupported | Expected on SMS, landing pages and anything other than Email, Email Template or Reusable Content Block. |
+| **Built from** shows content keys but no names | The name lookup could not answer. Most likely your user lacks read access to CMS content, or the GraphQL wire is unavailable in the builder frame. Nothing else is affected — no finding depends on the names. |
 | Panel does not appear when you open a **template** | The component targets `lightning__CmsEditorExtension` with no content-type restriction, so nothing on our side blocks it — but whether MCN offers editor extensions in the template builder is platform behaviour. If the panel is absent there, no code change here fixes it. |
 | A block you embedded still shows as missing its unsubscribe link | Expected. The email stores only a pointer to the block, so its contents are not readable from the email — `BLK001` prints the block's content key; open that block and run the panel on it there. |
 | "This editor won't let the panel use the clipboard" | The builder's frame does not grant clipboard access. The report text appears below the message — select and copy it manually. Nothing is wrong with the scan. |
@@ -229,7 +233,7 @@ npm install
 npm run test:unit
 ```
 
-552 tests across three suites. `preflightEngine` and `qaCompare` are pure modules tested directly.
+557 tests across three suites. `preflightEngine` and `qaCompare` are pure modules tested directly.
 The `emailPreflight` suite is deliberately thin — it exists mainly to compile the template, since a
 broken binding there is otherwise only discoverable at deploy time. It relies on the stub at
 `force-app/test/jest-mocks/experience/cmsEditorApi.js`, wired up through `moduleNameMapper`, because
