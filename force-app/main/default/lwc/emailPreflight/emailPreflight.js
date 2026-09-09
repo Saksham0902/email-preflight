@@ -156,6 +156,12 @@ export default class EmailPreflight extends LightningElement {
      */
     @track treeOpen = false;
 
+    /**
+     * Whether the "built from" card is unfolded. Folded to begin with, because its summary line
+     * already answers the question for most readers and the panel lives in a narrow sidebar.
+     */
+    @track usageOpen = false;
+
     /** idle → done on a successful copy, or failed when the clipboard is not available to us. */
     @track copyState = COPY_IDLE;
     @track copySheetState = COPY_IDLE;
@@ -338,6 +344,97 @@ export default class EmailPreflight extends LightningElement {
     }
     get contentName() {
         return (this.currentContent && this.currentContent.title) || '';
+    }
+
+    // ---- what the email is built from ---------------------------------------------
+
+    /**
+     * The template and brand behind this email.
+     *
+     * Shown as content keys because that is honestly all there is: turning a key into a name needs a
+     * server call, and this panel makes none. The key is still the half worth having — it is what
+     * CMS search matches on, so it is what somebody would paste in to go and look.
+     *
+     * A template row appears only for emails built from a saved template. The out-of-the-box starter
+     * layouts copy themselves in and leave no reference behind, so their absence here is a fact
+     * about how the email was made rather than a gap in what the panel can see.
+     */
+    get usageRows() {
+        const usage = (this.result && this.result.usage) || null;
+        if (!usage) return [];
+        const rows = [];
+        if (usage.template) {
+            const { contentKey, locked, components } = usage.template;
+            rows.push({
+                key: 'template',
+                label: 'Template',
+                value: contentKey,
+                // A template that locks nothing is a starting point, not a guardrail. Worth saying
+                // plainly to anyone who assumed theirs was protecting the layout.
+                note: components
+                    ? locked === 0
+                        ? `Nothing locked — all ${components} components are editable`
+                        : `${locked} of ${components} components locked`
+                    : ''
+            });
+        }
+        if (usage.brand) {
+            const { contentKey } = usage.brand;
+            rows.push({
+                key: 'brand',
+                label: 'Brand',
+                value: contentKey || 'Salesforce default',
+                note: contentKey ? '' : 'No brand content item — the org default is in use'
+            });
+        }
+        return rows;
+    }
+
+    /** CMS images placed in the email, by key, with the file name where the reference carries one. */
+    get usageImages() {
+        const usage = (this.result && this.result.usage) || null;
+        return ((usage && usage.images) || []).map((img) => ({
+            key: img.contentKey,
+            contentKey: img.contentKey,
+            fileName: img.fileName
+        }));
+    }
+
+    get hasUsage() {
+        return this.usageRows.length > 0 || this.usageImages.length > 0;
+    }
+    get hasUsageImages() {
+        return this.usageImages.length > 0;
+    }
+    get usageImagesHeading() {
+        return `Images (${this.usageImages.length})`;
+    }
+
+    /**
+     * What the card says while folded.
+     *
+     * Carries the actual answer rather than a row count, so the common question — what is this email
+     * made of — is answered without anyone having to open anything.
+     */
+    get usageSummary() {
+        const usage = (this.result && this.result.usage) || {};
+        const parts = [];
+        if (usage.template) parts.push('template');
+        if (usage.brand) parts.push('brand');
+        const n = this.usageImages.length;
+        if (n > 0) parts.push(`${n} image${n === 1 ? '' : 's'}`);
+        const text = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+        return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+    }
+
+    get usageChevron() {
+        return this.usageOpen ? 'utility:chevrondown' : 'utility:chevronright';
+    }
+    get usageAriaExpanded() {
+        return this.usageOpen ? 'true' : 'false';
+    }
+    handleUsageToggle() {
+        this.usageOpen = !this.usageOpen;
     }
 
     // ---- ignored findings ---------------------------------------------------------

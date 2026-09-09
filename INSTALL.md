@@ -203,7 +203,7 @@ npm install
 npm run test:unit
 ```
 
-511 tests across three suites. `preflightEngine` and `qaCompare` are pure modules tested directly.
+542 tests across three suites. `preflightEngine` and `qaCompare` are pure modules tested directly.
 The `emailPreflight` suite is deliberately thin — it exists mainly to compile the template, since a
 broken binding there is otherwise only discoverable at deploy time. It relies on the stub at
 `force-app/test/jest-mocks/experience/cmsEditorApi.js`, wired up through `moduleNameMapper`, because

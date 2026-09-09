@@ -20,6 +20,7 @@ import {
     collectAnchors,
     collectImages,
     collectEmbeddedBlocks,
+    collectContentUsage,
     checkEmbeddedBlocks,
     buildComponentTree,
     blockNameOf,
@@ -69,9 +70,14 @@ import {
     collectLocatedStrings
 } from 'c/preflightEngine';
 
-/** Build a minimal email body with the given children. */
-function emailBody(children) {
-    return { 'sfdc_cms:block': { children } };
+/**
+ * Build a minimal email body with the given children.
+ *
+ * `extra` carries the fields that sit beside the block tree rather than inside it — the template and
+ * brand references live there.
+ */
+function emailBody(children, extra = {}) {
+    return { 'sfdc_cms:block': { children }, ...extra };
 }
 
 /** An HTML block node. */
@@ -2176,6 +2182,104 @@ describe('checkAmpscript', () => {
         const found = checkAmpscript({ strings: ['%%[ IF 0 == 1 THEN ]%%'] });
         expect(found[0].rule).toBe('AMP001');
         expect(found[0].severity).toBe(SEVERITY.INFO);
+    });
+});
+
+describe('collectContentUsage', () => {
+    /** An image component as the builder stores one that points at a CMS asset. */
+    const cmsImage = (contentKey, fileName) => ({
+        definition: 'lightning/image',
+        attributes: { imageInfo: { fileName, source: { type: 'imageReference', ref: { contentKey } } } }
+    });
+
+    // Taken from a real email built from a saved template, rather than invented.
+    const templated = emailBody([], {
+        'sfdc_cms:template': {
+            definition: 'MCLWKQ6FDLB5B2THFCIQLWZVTNKM',
+            attributes: {
+                schemaMap: {
+                    '0e39383d-84c9-4062-9558-c1afae07f3ee': { readOnly: false },
+                    '231e8942-7ad7-431e-b27a-2415b5cfc762': { readOnly: true }
+                }
+            }
+        },
+        'lightning:brandSource': { contentKey: 'MC7SLITDILTVGOBGU47JAPL64BZM' }
+    });
+
+    it('reads the template an email was built from', () => {
+        expect(collectContentUsage(templated).template.contentKey).toBe('MCLWKQ6FDLB5B2THFCIQLWZVTNKM');
+    });
+
+    it('counts how many template components are locked', () => {
+        expect(collectContentUsage(templated).template).toMatchObject({ components: 2, locked: 1 });
+    });
+
+    // The out-of-the-box starter layouts copy themselves in and keep no reference back. Absent has
+    // to mean "not built from a saved template" — never "we looked and could not tell".
+    it('reports no template for an email not built from one', () => {
+        expect(collectContentUsage(emailBody([htmlNode('<p>Hi</p>')])).template).toBeNull();
+    });
+
+    it('ignores a template node carrying no reference', () => {
+        expect(collectContentUsage(emailBody([], { 'sfdc_cms:template': { attributes: {} } })).template).toBeNull();
+    });
+
+    it('accepts a template reference written as an @cms pointer', () => {
+        const body = emailBody([], { 'sfdc_cms:template': { definition: '@cms/MCLWKQ6' } });
+        expect(collectContentUsage(body).template.contentKey).toBe('MCLWKQ6');
+    });
+
+    it('reads a brand held as a content key', () => {
+        expect(collectContentUsage(templated).brand).toEqual({
+            contentKey: 'MC7SLITDILTVGOBGU47JAPL64BZM',
+            defaultOption: ''
+        });
+    });
+
+    it('reads a brand that is the org default rather than a content item', () => {
+        const body = emailBody([], { 'lightning:brandSource': { defaultBrandOption: 'sfdcBrand' } });
+        expect(collectContentUsage(body).brand).toEqual({ contentKey: '', defaultOption: 'sfdcBrand' });
+    });
+
+    it('collects CMS images by key, with the file name when the reference carries one', () => {
+        const body = emailBody([cmsImage('MCYGXHBGRROJG25GLP4WZDHQWG3Q', 'ODFLLogo.png')]);
+        expect(collectContentUsage(body).images).toEqual([
+            { contentKey: 'MCYGXHBGRROJG25GLP4WZDHQWG3Q', fileName: 'ODFLLogo.png' }
+        ]);
+    });
+
+    // A logo is normally placed in the header and again in the footer, and walkNodes reaches the
+    // same imageInfo twice besides. One asset is one line.
+    it('lists an asset used more than once only once', () => {
+        const body = emailBody([cmsImage('MCYGX', 'logo.png'), cmsImage('MCYGX', 'logo.png')]);
+        expect(collectContentUsage(body).images).toHaveLength(1);
+    });
+
+    it('ignores an image that has no CMS reference behind it', () => {
+        const body = emailBody([
+            { definition: 'lightning/image', attributes: { imageInfo: { url: 'https://cdn.example.com/a.png' } } }
+        ]);
+        expect(collectContentUsage(body).images).toEqual([]);
+    });
+
+    it('finds nothing to report in an empty body', () => {
+        expect(collectContentUsage({})).toEqual({ template: null, brand: null, images: [] });
+    });
+
+    it('is carried on the preflight result', () => {
+        const result = runPreflight({ title: 'T', contentBody: templated });
+        expect(result.usage.template.contentKey).toBe('MCLWKQ6FDLB5B2THFCIQLWZVTNKM');
+    });
+
+    it('appears in the pasteable report, so a reader knows what was looked at', () => {
+        const report = buildTextReport(runPreflight({ title: 'T', contentBody: templated }));
+        expect(report).toContain('Built from:');
+        expect(report).toContain('Template: MCLWKQ6FDLB5B2THFCIQLWZVTNKM (1 of 2 components locked)');
+    });
+
+    it('leaves the report alone when the email references nothing', () => {
+        const report = buildTextReport(runPreflight({ title: 'T', contentBody: emailBody([]) }));
+        expect(report).not.toContain('Built from:');
     });
 });
 

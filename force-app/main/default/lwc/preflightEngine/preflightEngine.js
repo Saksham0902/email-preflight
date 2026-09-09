@@ -1450,6 +1450,93 @@ function looksLikeAnIdentifier(value) {
     return CONTENT_KEY_SHAPE.test(v) || UUID_SHAPE.test(v) || /^@cms\//i.test(v);
 }
 
+/** Where an email records the template it was built from, and the brand it draws styling from. */
+const TEMPLATE_KEY = 'sfdc_cms:template';
+const BRAND_KEY = 'lightning:brandSource';
+
+/** A content key written either bare or as an `@cms/` pointer, reduced to the key itself. */
+function bareContentKey(value) {
+    if (typeof value !== 'string') return '';
+    const v = value.trim();
+    const pointer = CMS_POINTER.exec(v);
+    return pointer ? pointer[1] : v;
+}
+
+/**
+ * The other content items this email points at: the template behind it, the brand it inherits, and
+ * the CMS images it places.
+ *
+ * Deliberately not a check. Nothing here is a problem to be fixed — it is the answer to "what is
+ * this email actually made of", which is the first thing a reviewer wants and the one thing the
+ * builder never shows in a single place. Handing someone that list is also what makes the rest of
+ * the report auditable: a finding about the wrong logo means very little until you can see which
+ * logo is in there.
+ *
+ * The template reference only exists on emails built from a SAVED template content item. Starting
+ * from one of the out-of-the-box starter layouts copies that layout's content in and keeps no link
+ * back, so a missing template here means "not built from a saved template" — it never means "built
+ * from a template we could not identify". Worth being precise about, because the two would call for
+ * opposite reactions from a reviewer.
+ *
+ * Everything is reported as a content key rather than a name. Resolving a key to its name needs a
+ * server round trip and this panel deliberately makes none, so a key is genuinely all there is. It
+ * is still the useful half: the key is what the CMS search box and the export folder are named
+ * after, so it is what somebody would go and look up.
+ *
+ * @param {*} body
+ * @returns {{template: ?object, brand: ?object, images: Array<{contentKey:string, fileName:string}>}}
+ */
+export function collectContentUsage(body) {
+    const usage = { template: null, brand: null, images: [] };
+    const seenImage = new Set();
+
+    walkNodes(body, (node) => {
+        const template = node[TEMPLATE_KEY];
+        if (!usage.template && template && typeof template === 'object') {
+            const contentKey = bareContentKey(template.definition);
+            if (contentKey) {
+                // `schemaMap` is the template stating, per component, whether an author may edit it.
+                // Counting it is the difference between a template that enforces something and one
+                // that is only a starting point, and the two look identical in the builder.
+                const map = (template.attributes && template.attributes.schemaMap) || {};
+                const entries = Object.values(map).filter((v) => v && typeof v === 'object');
+                usage.template = {
+                    contentKey,
+                    components: entries.length,
+                    locked: entries.filter((v) => v.readOnly === true).length
+                };
+            }
+        }
+
+        const brand = node[BRAND_KEY];
+        if (!usage.brand && brand && typeof brand === 'object') {
+            // Either a key pointing at a brand content item, or a flag saying the org default is in
+            // use. Both are answers to "which brand"; only one of them is a thing you can go open.
+            const contentKey = bareContentKey(brand.contentKey);
+            const defaultOption =
+                typeof brand.defaultBrandOption === 'string' ? brand.defaultBrandOption.trim() : '';
+            if (contentKey || defaultOption) usage.brand = { contentKey, defaultOption };
+        }
+
+        const info = (node.attributes && node.attributes.imageInfo) || node.imageInfo;
+        if (info && typeof info === 'object') {
+            const ref = (info.source && info.source.ref) || {};
+            const contentKey = bareContentKey(ref.contentKey);
+            // Deduped on the key, not the node: walkNodes reaches `imageInfo` from both the
+            // component and its attributes, and the same asset is often placed more than once.
+            if (contentKey && !seenImage.has(contentKey)) {
+                seenImage.add(contentKey);
+                usage.images.push({
+                    contentKey,
+                    fileName: typeof info.fileName === 'string' ? info.fileName.trim() : ''
+                });
+            }
+        }
+    });
+
+    return usage;
+}
+
 /**
  * Data providers attached to the content, from `lightning:dataProviders[]`.
  *
@@ -3466,6 +3553,9 @@ export function runPreflight(content, options = {}) {
         // content in here we did not read" message above the results rather than leaving it to sort
         // to the bottom of a long list as the note it is.
         embeddedBlocks: ctx.embeddedBlocks,
+        // What the email is built from, rather than what is wrong with it. Carried on the result so
+        // the panel and the pasteable report can both show it without re-walking the body.
+        usage: collectContentUsage(body),
         shape: describeShape(body),
         stats: {
             links: ctx.links.length,
@@ -3485,6 +3575,38 @@ export function runPreflight(content, options = {}) {
  * @param {string} [label] content name, for the header line
  * @returns {string}
  */
+/**
+ * The "built from" block for the pasteable report.
+ *
+ * Included because the report is what gets handed to somebody who cannot see the email. A list of
+ * problems with no statement of what was being looked at is hard to act on and impossible to
+ * re-check later, once the email has moved on.
+ *
+ * @param {object} [usage] the `usage` section of a result
+ * @returns {string[]} zero lines when the email references nothing
+ */
+function usageLines(usage) {
+    if (!usage) return [];
+    const lines = [];
+    if (usage.template) {
+        const { contentKey, locked, components } = usage.template;
+        const locks = components ? ` (${locked} of ${components} components locked)` : '';
+        lines.push(`  Template: ${contentKey}${locks}`);
+    }
+    if (usage.brand) {
+        const { contentKey, defaultOption } = usage.brand;
+        lines.push(`  Brand: ${contentKey || `org default${defaultOption ? ` — ${defaultOption}` : ''}`}`);
+    }
+    const images = usage.images || [];
+    if (images.length > 0) {
+        lines.push(`  CMS images (${images.length}):`);
+        for (const img of images) {
+            lines.push(`    - ${img.contentKey}${img.fileName ? ` — ${img.fileName}` : ''}`);
+        }
+    }
+    return lines;
+}
+
 export function buildTextReport(result, label = '') {
     const lines = [];
     lines.push(`Email Preflight${label ? ` — ${label}` : ''}`);
@@ -3497,6 +3619,11 @@ export function buildTextReport(result, label = '') {
         `${result.stats.expressions} expression(s), ${result.stats.textChars} character(s) of copy, ` +
         `about ${result.stats.sizeKb} KB.`
     );
+    const built = usageLines(result.usage);
+    if (built.length > 0) {
+        lines.push('Built from:');
+        lines.push(...built);
+    }
     // Said before the list, not after it. Someone pasting this into a ticket is handing over what
     // reads as the complete picture, and a curated list that does not admit to being curated is the
     // one way this report could actively mislead.

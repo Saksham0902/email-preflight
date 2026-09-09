@@ -134,6 +134,61 @@
 
                         <p class="slds-text-body_small slds-text-color_weak slds-m-vertical_x-small">{statsLine}</p>
 
+                        <!-- What the email is made of, rather than what is wrong with it. Folded by
+                             default, with the answer carried in the summary line: this is the first
+                             thing a reviewer wants to know and the panel is too narrow to spend
+                             several rows on something most people only need to glance at. -->
+                        <template if:true={hasUsage}>
+                            <div data-id="usage" class="tree card slds-m-top_x-small">
+                                <button type="button" class="tree-head" aria-expanded={usageAriaExpanded}
+                                    onclick={handleUsageToggle}>
+                                    <lightning-icon icon-name={usageChevron} size="xx-small"
+                                        alternative-text=""></lightning-icon>
+                                    <span class="tree-title">Built from</span>
+                                    <span class="tree-summary">{usageSummary}</span>
+                                </button>
+
+                                <template if:true={usageOpen}>
+                                    <template for:each={usageRows} for:item="row">
+                                        <div key={row.key} class="tree-line">
+                                            <div class="tree-row tree-row_static">
+                                                <span class="tree-label">
+                                                    {row.label}: <code>{row.value}</code>
+                                                    <template if:true={row.note}>
+                                                        <span class="tree-sub">{row.note}</span>
+                                                    </template>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <template if:true={hasUsageImages}>
+                                        <div class="tree-line">
+                                            <div class="tree-row tree-row_static">
+                                                <span class="tree-label">
+                                                    {usageImagesHeading}
+                                                    <template for:each={usageImages} for:item="img">
+                                                        <span key={img.key} class="tree-sub">
+                                                            <code>{img.contentKey}</code>
+                                                            <template if:true={img.fileName}>
+                                                                — {img.fileName}
+                                                            </template>
+                                                        </span>
+                                                    </template>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <p class="tree-hint">
+                                        These are content keys. Paste one into CMS search to open the item —
+                                        names are not shown because reading them would need a server call,
+                                        and this panel makes none.
+                                    </p>
+                                </template>
+                            </div>
+                        </template>
+
                         <template if:true={isClean}>
                             <div class="card card_ok card-pad" role="status">
                                 <p>Nothing found — this passed every check.</p>

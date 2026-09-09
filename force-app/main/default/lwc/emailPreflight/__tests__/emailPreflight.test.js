@@ -599,6 +599,63 @@ describe('emailPreflight panel', () => {
         expect(el.shadowRoot.querySelector('[data-id="block-banner"]')).toBeNull();
     });
 
+    // ---- what the email is built from -----------------------------------------------
+
+    const builtFrom = () =>
+        emailBody([htmlNode('<p>Hello</p>')], {
+            'sfdc_cms:template': {
+                definition: 'MCLWKQ6FDLB5B2THFCIQLWZVTNKM',
+                attributes: { schemaMap: { a: { readOnly: false }, b: { readOnly: false } } }
+            },
+            'lightning:brandSource': { contentKey: 'MC7SLITDILTVGOBGU47JAPL64BZM' }
+        });
+
+    // Folded, the summary is the whole answer for most readers — so it has to say what is in there
+    // rather than how many rows there are.
+    it('says what the email is built from without being opened', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(builtFrom()));
+        await flush();
+        const card = el.shadowRoot.querySelector('[data-id="usage"]');
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('Template and brand');
+        expect(card.textContent).not.toContain('MCLWKQ6FDLB5B2THFCIQLWZVTNKM');
+    });
+
+    it('shows the template and brand keys once opened', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(builtFrom()));
+        await flush();
+        el.shadowRoot.querySelector('[data-id="usage"] button').click();
+        await flush();
+        const card = el.shadowRoot.querySelector('[data-id="usage"]');
+        expect(card.textContent).toContain('MCLWKQ6FDLB5B2THFCIQLWZVTNKM');
+        expect(card.textContent).toContain('MC7SLITDILTVGOBGU47JAPL64BZM');
+    });
+
+    // A template locking nothing is a starting point rather than a guardrail, which is not obvious
+    // from the builder and is worth saying to anyone who assumed otherwise.
+    it('says plainly when a template locks nothing', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(builtFrom()));
+        await flush();
+        el.shadowRoot.querySelector('[data-id="usage"] button').click();
+        await flush();
+        expect(el.shadowRoot.querySelector('[data-id="usage"]').textContent)
+            .toContain('Nothing locked — all 2 components are editable');
+    });
+
+    it('shows no card for an email that references nothing', async () => {
+        const el = build();
+        emitContext(TYPE_EMAIL);
+        emitContent(content(emailBody([htmlNode('<p>Hello</p>')])));
+        await flush();
+        expect(el.shadowRoot.querySelector('[data-id="usage"]')).toBeNull();
+    });
+
     it('scans on its own once both wires have delivered', async () => {
         const el = build();
         emitContext(TYPE_EMAIL);
