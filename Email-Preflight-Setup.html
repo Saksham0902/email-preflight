@@ -505,6 +505,12 @@ everything after the deploy.</p>
         landing pages</td>
   </tr>
   <tr>
+    <td><strong>Built from</strong> lists content keys but no names</td>
+    <td>The name lookup could not answer, which almost always means your Salesforce user cannot read
+        CMS content in that org — ask an admin for read access. Nothing else is affected: no check
+        depends on the names, and a key pasted into CMS search still finds the item</td>
+  </tr>
+  <tr>
     <td>A shared footer block still shows as missing its unsubscribe link</td>
     <td>Expected. An email stores only a pointer to a content block, so the panel cannot read inside
         one. It names the block and tells you to open and check it separately</td>
