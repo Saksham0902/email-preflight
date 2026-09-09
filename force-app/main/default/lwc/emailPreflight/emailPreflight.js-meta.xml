@@ -4,7 +4,7 @@
     <isExposed>true</isExposed>
     <masterLabel>Email Preflight</masterLabel>
     <!-- Description is capped at 255 characters by the platform — keep it short. -->
-    <description>Read-only pre-send checks for MCN emails and reusable content blocks: Handlebars syntax, unsubscribe link, broken links, missing alt text, undeclared variables, and documented RCB and dynamic-content limitations.</description>
+    <description>Read-only pre-send checks for MCN emails, templates and reusable content blocks: Handlebars syntax, unsubscribe link, broken links, missing alt text, undeclared variables, and documented RCB and dynamic-content limitations.</description>
     <targets>
         <target>lightning__CmsEditorExtension</target>
     </targets>

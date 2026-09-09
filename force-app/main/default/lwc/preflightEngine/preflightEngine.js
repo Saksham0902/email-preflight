@@ -1910,6 +1910,21 @@ export function collectBareVariables(strings) {
 // ---------------------------------------------------------------------------
 
 /** Build a finding. `locations` is truncated here so every consumer gets a bounded list. */
+/**
+ * What to call the thing being checked, so a finding can name it correctly.
+ *
+ * Telling someone looking at a template that "this email pulls in a reusable block" is a small lie,
+ * and small lies about what the tool is looking at are how a reader decides it is looking at the
+ * wrong thing entirely.
+ *
+ * @param {object} ctx
+ * @returns {'block'|'template'|'email'}
+ */
+export function contentNoun(ctx) {
+    if (ctx.isRcb) return 'block';
+    return ctx.isTemplate ? 'template' : 'email';
+}
+
 function finding(rule, severity, title, detail, locations = []) {
     const shown = locations.slice(0, MAX_LOCATIONS).map(String);
     return {
@@ -3404,7 +3419,7 @@ export function checkEmbeddedBlocks(ctx) {
             'BLK001',
             SEVERITY.INFO,
             one ? 'A reusable block here was not checked' : `${n} reusable blocks here were not checked`,
-            `This ${ctx.isRcb ? 'block' : 'email'} pulls in ${one ? 'a reusable block that is' : `${n} reusable blocks that are`} ` +
+            `This ${contentNoun(ctx)} pulls in ${one ? 'a reusable block that is' : `${n} reusable blocks that are`} ` +
                 `stored separately, so nothing inside ${one ? 'it' : 'them'} was checked — not the links, images, ` +
                 'unsubscribe link or postal address. Open each one and run this tool on it as well. Two things ' +
                 `follow from this: any compliance warning above may simply be content living in ${one ? 'this block' : 'these blocks'}, ` +
@@ -3515,8 +3530,11 @@ export function runPreflight(content, options = {}) {
         dataProviders: collectDataProviders(body),
         backgroundImages: collectBackgroundImages(body),
         bareVariables: collectBareVariables(strings),
+        // A template is an email layout, so every email rule is meaningful for it and `isEmail`
+        // stays true. `isTemplate` exists only so findings can name what the reader is looking at.
         isEmail: options.contentType !== 'rcb',
         isRcb: options.contentType === 'rcb',
+        isTemplate: options.contentType === 'template',
         roles: Array.isArray(options.blockRoles) ? options.blockRoles : []
     };
 

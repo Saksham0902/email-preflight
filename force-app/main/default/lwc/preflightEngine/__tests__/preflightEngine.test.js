@@ -2185,6 +2185,32 @@ describe('checkAmpscript', () => {
     });
 });
 
+describe('template mode', () => {
+    const blockBody = emailBody([
+        { definition: 'sfdc_cms/reusableContentBlock', attributes: { content: { definition: '@cms/MCK263' } } }
+    ]);
+    const run = (contentType, body = blockBody) => runPreflight({ title: 'T', contentBody: body }, { contentType });
+
+    it('calls a template a template', () => {
+        expect(run('template').findings.find((f) => f.rule === 'BLK001').detail).toContain('This template pulls in');
+    });
+
+    it('still calls an email an email', () => {
+        expect(run('email').findings.find((f) => f.rule === 'BLK001').detail).toContain('This email pulls in');
+    });
+
+    // The point of checking a template at all: it is an email layout, so the email rules are the
+    // right ones. A template with no subject line produces emails with no subject line.
+    it('applies the email ruleset', () => {
+        expect(run('template', emailBody([])).findings.some((f) => f.rule === 'CNT001')).toBe(true);
+    });
+
+    it('does not ask a template which kind of block it is', () => {
+        expect(run('template', emailBody([])).findings.some((f) => f.rule === 'BLK002')).toBe(false);
+        expect(run('rcb', emailBody([])).findings.some((f) => f.rule === 'BLK002')).toBe(true);
+    });
+});
+
 describe('collectContentUsage', () => {
     /** An image component as the builder stores one that points at a CMS asset. */
     const cmsImage = (contentKey, fileName) => ({

@@ -13,6 +13,7 @@ import { getContent, getContext } from 'experience/cmsEditorApi';
 const TYPE_EMAIL = 'sfdc_cms__email';
 const TYPE_SMS = 'sfdc_cms__sms';
 const TYPE_RCB = 'sfdc_cms__emailFragment';
+const TYPE_TEMPLATE = 'sfdc_cms__emailTemplate';
 
 function build() {
     const el = createElement('c-email-preflight', { is: EmailPreflight });
@@ -597,6 +598,65 @@ describe('emailPreflight panel', () => {
         emitContent(content(withBlock()));
         await flush();
         expect(el.shadowRoot.querySelector('[data-id="block-banner"]')).toBeNull();
+    });
+
+    // ---- email templates --------------------------------------------------------------
+
+    // A broken master template is a fault repeated across every email built from it, so this is the
+    // earliest and cheapest place to catch one. Before this the panel refused the type outright.
+    it('checks an email template rather than refusing it', async () => {
+        const el = build();
+        emitContext(TYPE_TEMPLATE);
+        emitContent(content(emailBody([htmlNode('<p>Hello</p>')], { subject: 'Hi' })));
+        await flush();
+        expect(el.shadowRoot.textContent).toContain('Results');
+        expect(el.shadowRoot.textContent).not.toContain("there's nothing to check here");
+    });
+
+    it('names the type it is checking', async () => {
+        const el = build();
+        emitContext(TYPE_TEMPLATE);
+        emitContent(content(emailBody([htmlNode('<p>Hello</p>')])));
+        await flush();
+        expect(el.shadowRoot.textContent).toContain('Email Template — checked as an email would be');
+    });
+
+    it('calls the tabs Template Issues and Template QA', async () => {
+        const el = build();
+        emitContext(TYPE_TEMPLATE);
+        emitContent(content(emailBody([htmlNode('<p>Hello</p>')])));
+        await flush();
+        expect(el.shadowRoot.textContent).toContain('Template Issues');
+        expect(el.shadowRoot.textContent).toContain('Template QA');
+        expect(el.shadowRoot.textContent).not.toContain('Email Issues');
+    });
+
+    // Subject and preheader belong to a template as much as to an email, which is the whole reason
+    // the email ruleset is the right one to apply.
+    it('still applies the subject rules a block would skip', async () => {
+        const el = build();
+        emitContext(TYPE_TEMPLATE);
+        emitContent(content(emailBody([htmlNode('<p>Hello there, this is the body copy.</p>')])));
+        await flush();
+        expect(el.shadowRoot.textContent).toContain('subject');
+    });
+
+    it('says "template" when a block inside one went unchecked', async () => {
+        const el = build();
+        emitContext(TYPE_TEMPLATE);
+        emitContent(content(withBlock()));
+        await flush();
+        expect(el.shadowRoot.querySelector('[data-id="block-banner"]').textContent)
+            .toContain('This template contains a content block');
+    });
+
+    it('still refuses a type it has no rules for', async () => {
+        const el = build();
+        emitContext(TYPE_SMS);
+        emitContent(content(emailBody([htmlNode('<p>Hello</p>')])));
+        await flush();
+        expect(el.shadowRoot.textContent).toContain("there's nothing to check here");
+        expect(el.shadowRoot.textContent).toContain('Emails, Email Templates and Reusable Content Blocks');
     });
 
     // ---- what the email is built from -----------------------------------------------

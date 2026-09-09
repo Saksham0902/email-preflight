@@ -26,10 +26,12 @@ import { collectQaTargets, compareValue, QA_FIELDS, QA_GROUPS, runQaField, STATU
 // Content-type fully-qualified names the editor reports through getContext.
 const TYPE_EMAIL = 'sfdc_cms__email';
 const TYPE_RCB = 'sfdc_cms__emailFragment';
+const TYPE_TEMPLATE = 'sfdc_cms__emailTemplate';
 
 const STATE_UNKNOWN = 'unknown';
 const STATE_EMAIL = 'email';
 const STATE_RCB = 'rcb';
+const STATE_TEMPLATE = 'template';
 const STATE_UNSUPPORTED = 'unsupported';
 
 /** SLDS theme per severity — errors red, warnings yellow, notes plain. */
@@ -93,6 +95,7 @@ function friendlyTypeName(fqn) {
     if (!fqn || typeof fqn !== 'string') return 'this content';
     if (fqn === TYPE_EMAIL) return 'Email';
     if (fqn === TYPE_RCB) return 'Reusable Content Block';
+    if (fqn === TYPE_TEMPLATE) return 'Email Template';
     const bare = fqn.includes('__') ? fqn.split('__').pop() : fqn;
     if (/^sms$/i.test(bare)) return 'SMS';
     const spaced = bare.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim();
@@ -214,6 +217,7 @@ export default class EmailPreflight extends LightningElement {
         this.detectedType = t;
         if (t === TYPE_EMAIL) this.detectionState = STATE_EMAIL;
         else if (t === TYPE_RCB) this.detectionState = STATE_RCB;
+        else if (t === TYPE_TEMPLATE) this.detectionState = STATE_TEMPLATE;
         else this.detectionState = STATE_UNSUPPORTED;
     }
 
@@ -238,6 +242,17 @@ export default class EmailPreflight extends LightningElement {
         if (this.detectionState === STATE_UNKNOWN) return this.manualMode === 'rcb';
         return false;
     }
+    /**
+     * A template gets the email ruleset, because a template is an email layout — every rule about
+     * links, images, compliance and rendering applies to it just as it does to the email it will
+     * produce. Checking it here is also the earlier place to catch a fault: a broken master template
+     * is a fault repeated across every email built from it.
+     */
+    get isTemplate() {
+        if (this.detectionState === STATE_TEMPLATE) return true;
+        if (this.detectionState === STATE_UNKNOWN) return this.manualMode === 'template';
+        return false;
+    }
     /** The manual radio appears only in the unresolved-detection fallback. */
     get showModeFallback() {
         return this.detectionState === STATE_UNKNOWN && !this.hasRun;
@@ -245,6 +260,7 @@ export default class EmailPreflight extends LightningElement {
     get modeOptions() {
         return [
             { label: 'Email', value: 'email' },
+            { label: 'Email template', value: 'template' },
             { label: 'Reusable content block', value: 'rcb' }
         ];
     }
@@ -253,11 +269,14 @@ export default class EmailPreflight extends LightningElement {
         return /^[aeiou]/i.test(name) ? `an ${name}` : `a ${name}`;
     }
     get unsupportedMessage() {
-        return `This tool checks Emails and Reusable Content Blocks. The current content is ${this.friendlyType}, so there's nothing to check here.`;
+        return `This tool checks Emails, Email Templates and Reusable Content Blocks. The current content is ${this.friendlyType}, so there's nothing to check here.`;
     }
     get detectedNote() {
         if (this.isRcb) {
             return 'Reusable Content Block — subject line and preheader rules are skipped; block compatibility rules are added.';
+        }
+        if (this.isTemplate) {
+            return 'Email Template — checked as an email would be, so anything wrong here is wrong in every email built from it.';
         }
         if (this.detectionState === STATE_EMAIL) {
             return 'Email — checking scripting, links, images, compliance and content basics.';
@@ -276,14 +295,17 @@ export default class EmailPreflight extends LightningElement {
      * when none appear. The label is the cheapest place to say what is being checked.
      */
     get issuesTabLabel() {
-        return this.isRcb ? 'Content Block Issues' : 'Email Issues';
+        if (this.isRcb) return 'Content Block Issues';
+        return this.isTemplate ? 'Template Issues' : 'Email Issues';
     }
     get qaTabLabel() {
-        return this.isRcb ? 'Content Block QA' : 'Email QA';
+        if (this.isRcb) return 'Content Block QA';
+        return this.isTemplate ? 'Template QA' : 'Email QA';
     }
     /** The noun the rest of the panel copy uses, so one getter changes all of it. */
     get contentNoun() {
-        return this.isRcb ? 'content block' : 'email';
+        if (this.isRcb) return 'content block';
+        return this.isTemplate ? 'template' : 'email';
     }
 
     // ---- block role -------------------------------------------------------------
@@ -339,8 +361,8 @@ export default class EmailPreflight extends LightningElement {
     get embeddedBlockHeading() {
         const n = this.embeddedBlockRows.length;
         return n === 1
-            ? 'This email contains a content block that was not checked'
-            : `This email contains ${n} content blocks that were not checked`;
+            ? `This ${this.contentNoun} contains a content block that was not checked`
+            : `This ${this.contentNoun} contains ${n} content blocks that were not checked`;
     }
     get contentName() {
         return (this.currentContent && this.currentContent.title) || '';
@@ -1096,7 +1118,7 @@ export default class EmailPreflight extends LightningElement {
         this.isLoading = true;
         try {
             this.result = runPreflight(this.currentContent, {
-                contentType: this.isRcb ? 'rcb' : 'email',
+                contentType: this.isRcb ? 'rcb' : this.isTemplate ? 'template' : 'email',
                 blockRoles: this.blockRoles
             });
             this.hasRun = true;
