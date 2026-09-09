@@ -277,6 +277,65 @@ describe('tree collection', () => {
         expect(images[0].hasAlt).toBe(false);
     });
 
+    // The exact shape the builder writes when "override alt text" is left unticked, which is the
+    // default: altText is empty here because the real description lives on the CMS asset.
+    it('recognises alt text that is held on the CMS asset instead of the email', () => {
+        const body = emailBody([
+            {
+                definition: 'lightning/image',
+                attributes: {
+                    imageInfo: {
+                        altText: '',
+                        overrideAltText: false,
+                        source: { type: 'imageReference', ref: { contentKey: 'MCBGZOFEA4WN' } },
+                        url: '/cms/media/MCBGZOFEA4WN?fileName=hero.png'
+                    }
+                }
+            }
+        ]);
+        const [image] = collectImages(body);
+        expect(image.hasAlt).toBe(false);
+        expect(image.altFromCms).toBe(true);
+    });
+
+    // Ticking override means the author typed it into the email, so it is readable and checkable.
+    it('does not treat overridden alt text as living in CMS', () => {
+        const body = emailBody([
+            {
+                definition: 'lightning/image',
+                attributes: {
+                    imageInfo: {
+                        altText: 'A doctor talking to a patient',
+                        overrideAltText: true,
+                        source: { type: 'imageReference', ref: { contentKey: 'MCBGZOFEA4WN' } }
+                    }
+                }
+            }
+        ]);
+        const [image] = collectImages(body);
+        expect(image.hasAlt).toBe(true);
+        expect(image.altFromCms).toBe(false);
+    });
+
+    // No CMS asset behind it means there is nowhere else for alt text to be, so a blank really is
+    // blank and IMG001 should still fire.
+    it('does not excuse a blank alt on an image with no CMS reference', () => {
+        const body = emailBody([
+            {
+                definition: 'lightning/image',
+                attributes: {
+                    imageInfo: { altText: '', overrideAltText: false, url: 'https://cdn/x.png' }
+                }
+            }
+        ]);
+        expect(collectImages(body)[0].altFromCms).toBe(false);
+    });
+
+    it('treats a blank alt in hand-written HTML as genuinely blank', () => {
+        const body = emailBody([htmlNode('<img src="https://cdn/x.png" alt="">')]);
+        expect(collectImages(body)[0].altFromCms).toBe(false);
+    });
+
     it('knows whether an image is linked', () => {
         const images = collectImages(emailBody([imageNode('MC_A', '', 'https://a.com')]));
         expect(images[0].linked).toBe(true);
@@ -818,6 +877,68 @@ describe('checkCompliance', () => {
         expect(checkCompliance({ strings: ['<p>hello</p>'], isEmail: false })).toEqual([]);
     });
 
+    // Reported from real use: the recommended way to show a postal address is to merge it in from
+    // Company Information, which is not address-shaped text, so the check called a correct footer
+    // non-compliant — the most alarming thing it can say, said wrongly.
+    it('accepts a postal address merged in from Company Information', () => {
+        const found = checkCompliance({
+            strings: ['<p>{!$organization.Address}</p>'],
+            isEmail: true,
+            body: {},
+            visibleText: ''
+        });
+        expect(ruleIds(found)).not.toContain('CMP003');
+    });
+
+    it('accepts address merge fields that are not the standard organization one', () => {
+        for (const token of [
+            '{!$brand.postalAddress}',
+            '{{companyStreetAddress}}',
+            '{!$organization.City}',
+            '{!Sender.MailingAddress}'
+        ]) {
+            const found = checkCompliance({
+                strings: [`<p>${token}</p>`],
+                isEmail: true,
+                body: {},
+                visibleText: ''
+            });
+            expect(ruleIds(found)).not.toContain('CMP003');
+        }
+    });
+
+    // The relaxation must not turn into "any merge field counts", or the rule stops meaning anything.
+    it('still reports a missing address when the only merge fields are unrelated', () => {
+        const found = checkCompliance({
+            strings: ['<p>Hello {!$user.FirstName}, see {{productName}}</p>'],
+            isEmail: true,
+            body: {},
+            visibleText: 'Hello , see'
+        });
+        expect(ruleIds(found)).toContain('CMP003');
+    });
+
+    // Splitting camelCase must not go so far that a word merely CONTAINING an address word counts.
+    it('does not mistake capacity for city', () => {
+        const found = checkCompliance({
+            strings: ['<p>Seats left: {!$event.capacity}</p>'],
+            isEmail: true,
+            body: {},
+            visibleText: 'Seats left:'
+        });
+        expect(ruleIds(found)).toContain('CMP003');
+    });
+
+    it('accepts an opt-out routed through a custom token rather than $link', () => {
+        const found = checkCompliance({
+            strings: ['<a href="{{unsubscribeUrl}}">Manage</a>'],
+            isEmail: true,
+            body: {},
+            visibleText: 'Manage'
+        });
+        expect(ruleIds(found)).not.toContain('CMP001');
+    });
+
     // The point of the role picker: these three rules are unrunnable from inside an email that
     // embeds the footer, so the block itself is the only place they can ever fire.
     it('runs on a block once it is marked as a footer', () => {
@@ -1053,6 +1174,43 @@ describe('checkLinks', () => {
 describe('checkImages', () => {
     it('says nothing about an image that has both alt text and a link', () => {
         expect(checkImages({ images: [{ label: 'a', hasAlt: true, linked: true }] })).toEqual([]);
+    });
+
+    // Reported from real use. Leaving "override" unticked is the DEFAULT and the recommended setup,
+    // so reading only the email's own altText field accused most correctly-described images in an
+    // org of having none.
+    it('does not claim an image is missing alt text when CMS holds it', () => {
+        const found = checkImages({
+            images: [{ label: 'hero.png', hasAlt: false, altFromCms: true, linked: true }]
+        });
+        expect(ruleIds(found)).not.toContain('IMG001');
+        expect(ruleIds(found)).toContain('IMG006');
+    });
+
+    it('keeps IMG006 a note, since the alt text is probably fine', () => {
+        const found = checkImages({
+            images: [{ label: 'hero.png', hasAlt: false, altFromCms: true, linked: true }]
+        });
+        expect(found.find((f) => f.rule === 'IMG006').severity).toBe(SEVERITY.INFO);
+    });
+
+    it('still warns about an image that genuinely has no alt text anywhere', () => {
+        const found = checkImages({
+            images: [{ label: 'hero.png', hasAlt: false, altFromCms: false, linked: true }]
+        });
+        expect(ruleIds(found)).toContain('IMG001');
+        expect(ruleIds(found)).not.toContain('IMG006');
+    });
+
+    it('separates the two cases rather than lumping them into one count', () => {
+        const found = checkImages({
+            images: [
+                { label: 'a.png', hasAlt: false, altFromCms: true, linked: true },
+                { label: 'b.png', hasAlt: false, altFromCms: false, linked: true }
+            ]
+        });
+        expect(found.find((f) => f.rule === 'IMG001').locations).toEqual(['b.png']);
+        expect(found.find((f) => f.rule === 'IMG006').locations).toEqual(['a.png']);
     });
 
     it('notes an image with no link so someone can decide whether it needs one', () => {

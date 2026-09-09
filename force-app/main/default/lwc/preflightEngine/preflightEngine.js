@@ -247,6 +247,37 @@ const POSTAL_ADDRESS = [
     /\b(suite|ste|floor|fl|po box|p\.o\. box)\s+[\w-]+/i
 ];
 
+/**
+ * An address that arrives as a merge field rather than as typed text.
+ *
+ * `{!$organization.Address}` pulls the address from Company Information at send time, which is the
+ * recommended way to do it — it cannot go stale and it is right in every email at once. But it is
+ * not address-SHAPED in the builder, so matching the copy for street names finds nothing and the
+ * compliance check accuses a footer that is completely correct.
+ *
+ * Matched on any merge-field-ish token carrying an address word, rather than on the exact
+ * `$organization` token, because orgs also use brand fields, custom labels and their own content
+ * variables for this, and each one we fail to recognise reads to the author as the tool being wrong
+ * about the law.
+ */
+const ADDRESS_WORD = /\b(address|street|city|postal|postcode|zip|mailing)\b/i;
+
+/**
+ * Whether anything here merges in an address.
+ *
+ * Word boundaries alone do not work: merge fields are written `postalAddress` and `MailingAddress`
+ * as often as `$organization.Address`, and `\baddress\b` matches none of those. Dropping the
+ * boundaries instead would make `capacity` contain `city`. So the token is split on camelCase and
+ * on the usual separators first, turning `brand.postalAddress` into `brand postal Address`, and
+ * only then matched whole-word.
+ */
+function hasAddressMergeField(corpus) {
+    const tokens = corpus.match(/\{[!{#][^{}]*\}/g) || [];
+    return tokens.some((token) =>
+        ADDRESS_WORD.test(token.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[._-]+/g, ' '))
+    );
+}
+
 /** Below this many characters of live copy, an email reads as image-only to a spam filter. */
 export const MIN_LIVE_TEXT = 120;
 
@@ -1017,6 +1048,18 @@ export function collectImages(body) {
             (a) => typeof a === 'string' && a.trim() !== ''
         );
         const ref = (info.source && info.source.ref) || {};
+        // The builder has two places to keep alt text. Tick "override" and it is typed into the
+        // email and lands in `altText` here. Leave it unticked — the default — and the email keeps
+        // an EMPTY `altText` while the real description lives on the image asset in CMS, which is a
+        // separate content item this panel cannot read.
+        //
+        // Reading `altText` alone therefore reports every correctly-described image in the org as
+        // having none. That is the worst kind of false positive: it fires on the people who did the
+        // accessible thing, and it fires on most of them.
+        const altFromCms =
+            info.overrideAltText === false &&
+            !alt &&
+            [ref.contentKey, ref.id].some((v) => typeof v === 'string' && v.trim() !== '');
         // `name` is the asset — a file name, or the CMS content key when that is all there is. It
         // feeds the rules that reason about what the file is called (is it a logo? is the alt text
         // just the file name?). `label` is what a human gets shown, and a bare content key is
@@ -1043,6 +1086,7 @@ export function collectImages(body) {
             label: place ? `${place.label}${asset ? ` (${asset})` : ''}` : name,
             name,
             hasAlt: Boolean(alt),
+            altFromCms,
             alt: alt ? alt.trim() : '',
             linked,
             hasSource,
@@ -1078,6 +1122,9 @@ export function collectImages(body) {
                 label: `Image in an HTML block${file ? ` (${file})` : ''}`,
                 name: file || src || 'image',
                 hasAlt: alt !== '',
+                // Hand-written HTML has nowhere else to keep alt text: what is in the tag is all
+                // there is, so a blank one here really is blank.
+                altFromCms: false,
                 alt,
                 linked: linkedRanges.some(([start, end]) => at >= start && at < end),
                 hasSource: src !== '',
@@ -1885,13 +1932,16 @@ export function checkCompliance(ctx) {
     // and plenty of orgs use their own page rather than the builder's token — so the rule fired on
     // compliant emails, as a warning, saying the one thing that would most alarm a reviewer. A legal
     // check that is wrong about a legal requirement gets ignored, and then it is worse than absent.
+    // Any merge token carrying the word, not only `$link.optout`. Orgs route opt-outs through custom
+    // content variables and their own tokens, and requiring the builder's exact one meant the check
+    // called those emails non-compliant.
     const hasUnsub =
-        /\{!\s*\$link\.[^}]*(optout|unsubscribe)/i.test(corpus) ||
+        /\{[!{#][^{}]*(optout|unsubscribe)/i.test(corpus) ||
         /(unsubscribe|opt[-_]?out)/i.test(urls) ||
         /\b(unsubscribe|opt out|opt-out)\b/i.test(anchorText);
 
     const hasPrefCentre =
-        /\{!\s*\$link\.[^}]*(preference)/i.test(corpus) ||
+        /\{[!{#][^{}]*(preference)/i.test(corpus) ||
         /(preference|subscription|email[-_]?settings)/i.test(urls) ||
         /\b(preferences?|subscription settings|which emails)\b/i.test(anchorText);
 
@@ -1933,11 +1983,17 @@ export function checkCompliance(ctx) {
     // The other half of CAN-SPAM, and the half nobody remembers. Matched against the visible copy
     // rather than the whole corpus so a street name inside a URL does not count as an address.
     const copy = ctx.visibleText || '';
-    if (!POSTAL_ADDRESS.some((re) => re.test(copy))) {
+    // Merge fields are matched against the raw corpus, not the visible copy: `visibleText` is what a
+    // recipient reads, and a token that has not been resolved yet is not that.
+    const hasPostal =
+        POSTAL_ADDRESS.some((re) => re.test(copy)) || hasAddressMergeField(corpus);
+    if (!hasPostal) {
         found.push(finding('CMP003', SEVERITY.WARNING, 'No postal address found',
             'Marketing emails are legally required to show a real postal address, usually in the ' +
             `footer next to the unsubscribe link. We could not find anything address-shaped in ${here}, ` +
-            `though addresses outside the US may not be recognised either. ${caveat}`));
+            'and no merge field that looks like it fills one in — an address pulled from Company ' +
+            'Information with {!$organization.Address} counts and is recognised. Addresses outside ' +
+            `the US may not be. ${caveat}`));
     }
     return found;
 }
@@ -2046,7 +2102,10 @@ export function checkLinks(ctx) {
 /** IMG — whether an image carries a description, a picture, and a destination. */
 export function checkImages(ctx) {
     const found = [];
-    const missing = ctx.images.filter((i) => !i.hasAlt);
+    // Images whose alt text is kept on the CMS asset are excluded here and reported separately. We
+    // genuinely do not know whether they have alt text — asserting they do not would be a guess, and
+    // one that happens to accuse people who set it up the recommended way.
+    const missing = ctx.images.filter((i) => !i.hasAlt && !i.altFromCms);
     if (missing.length) {
         const linkedCount = missing.filter((i) => i.linked).length;
         const linkedNote = linkedCount
@@ -2058,6 +2117,17 @@ export function checkImages(ctx) {
             'their email app blocks images — which many do by default. If an image is purely decorative, ' +
             'leaving it empty is the right thing to do and you can ignore this.',
             missing.map((i) => i.label)));
+    }
+
+    const fromCms = ctx.images.filter((i) => i.altFromCms);
+    if (fromCms.length) {
+        found.push(finding('IMG006', SEVERITY.INFO, 'Alt text is set on the image, not in the email',
+            `${fromCms.length} image(s) here are using the description stored on the image itself in ` +
+            'CMS, rather than one typed into this email. That is the normal way to do it, and usually ' +
+            'means the alt text is fine — but the image is a separate item, so we cannot see it from ' +
+            'here to confirm. If you want to check, open the image in CMS and look at its alt text, ' +
+            'or tick "override" on the image in this email to type one in and have it checked here.',
+            fromCms.map((i) => i.label)));
     }
 
     // An image component that was placed and then never given a picture. Everything about it looks

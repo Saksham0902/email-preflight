@@ -92,6 +92,28 @@
     white-space: pre-wrap;
   }
   pre code { background: none; padding: 0; font-size: inherit; }
+  /* The single most common way a setup guide fails someone: they paste a command verbatim, including
+     the parts that were meant to be their own values. Highlight plus bold, because highlight alone
+     does not survive a black-and-white print and bold alone is too quiet inside monospace — and both
+     of them do survive an import into Google Docs, which plainer markers like colour do not. */
+  .swap {
+    background-color: #fff2cc;
+    font-weight: 700;
+    padding: 0 2px;
+  }
+  /* Troubleshooting placed next to the step it belongs to. A reader stuck on step one does not know
+     there is a table at the bottom of the document, and would have stopped reading before finding
+     it — which is exactly what happened to the first team who used this. */
+  .stepfix {
+    border-left: 3px solid #c4c7c5;
+    background-color: #f8f9fa;
+    padding: 8px 14px;
+    margin: 0.8em 0 1.2em 0;
+    font-size: 10.5pt;
+  }
+  .stepfix p:first-child { margin-top: 0; }
+  .stepfix p:last-child { margin-bottom: 0; }
+  .stepfix strong.q { color: #202124; }
   .footer {
     margin-top: 2.5em;
     padding-top: 1em;
@@ -135,6 +157,36 @@
   object. Deploy it and it works.
 </div>
 
+<div class="callout">
+  <strong>About the commands in this guide.</strong> Anything <span class="swap">highlighted like
+  this</span> is a placeholder — replace it with your own value, including the highlighting itself.
+  Everything else is typed exactly as written. There are only three placeholders in the whole
+  document:
+  <table>
+    <tr>
+      <th style="width: 30%;">Placeholder</th>
+      <th style="width: 34%;">Replace with</th>
+      <th>Example</th>
+    </tr>
+    <tr>
+      <td><span class="swap">MyOrg</span></td>
+      <td>Any short nickname you choose for the org. You are inventing this, not looking it up</td>
+      <td><code>mcn-uat</code></td>
+    </tr>
+    <tr>
+      <td><span class="swap">path/to/Email-Preflight</span></td>
+      <td>Wherever you unzipped the folder</td>
+      <td><code>C:\Users\jane\Downloads\Email-Preflight</code></td>
+    </tr>
+    <tr>
+      <td><span class="swap">SomePassingTestClass</span></td>
+      <td>Production deploys only. The name of any Apex test class that already passes in that
+          org — ask whoever maintains it</td>
+      <td><code>AccountTriggerTest</code></td>
+    </tr>
+  </table>
+</div>
+
 <h2>Part 1 — Deploy it to the org</h2>
 
 <h3>What you need first</h3>
@@ -167,19 +219,57 @@
   </tr>
 </table>
 
-<h3>Step 1 — Get the project folder</h3>
+<h3>Step 1 — Unzip it and open a terminal there</h3>
 
-<p>You need the <code>emailPreflight</code> folder. It is the whole tool — there is nothing to
-download separately and nothing to install into it.</p>
+<p><strong>Unzip <code>Email-Preflight.zip</code> somewhere you can find again</strong> — your
+Desktop or Documents is fine. Do not work inside the zip preview window that Windows shows when you
+double-click the file; nothing you run will see those contents.</p>
 
-<p>Open a terminal and change into it. Everything from here on assumes you are inside this folder,
-which is the one containing <code>sfdx-project.json</code>:</p>
+<p>The unzipped folder should contain these, all at the same level:</p>
 
-<pre><code>cd path\to\emailPreflight</code></pre>
+<pre><code>Email-Preflight/
+  README.md
+  Email-Preflight-Overview.html
+  Email-Preflight-Setup.html
+  sfdx-project.json          &lt;-- this file is how you know you are in the right place
+  force-app/</code></pre>
 
-<p>If you are unsure you are in the right place, run <code>dir</code> (or <code>ls</code>) and check
-that you can see <code>sfdx-project.json</code> and a <code>force-app</code> folder. Being one folder
-too high is the most common reason the deploy in Step 4 fails.</p>
+<p>Now open a terminal in that folder. Everything from here on assumes you are inside it.</p>
+
+<p><strong>The reliable way, on either platform:</strong> open the folder in File Explorer or Finder
+first, then open a terminal <em>from</em> it — on Windows, type <code>cmd</code> into the address bar
+and press Enter; on a Mac, right-click the folder and choose <em>New Terminal at Folder</em>. Doing it
+this way means you never type a path at all, which removes the most common way this step goes wrong.</p>
+
+<p>If you would rather type it:</p>
+
+<pre><code>cd "<span class="swap">path/to/Email-Preflight</span>"</code></pre>
+
+<p>Then confirm you are in the right place. This should list <code>sfdx-project.json</code>:</p>
+
+<pre><code>dir        (Windows)
+ls         (Mac or Linux)</code></pre>
+
+<div class="stepfix">
+  <p><strong class="q">"The system cannot find the path specified" / "no such file or directory"</strong><br />
+  The path is wrong, or it has a space in it and you left the quotes off. Keep the quotation marks
+  exactly as shown above — <code>cd "C:\Users\jane\My Files\Email-Preflight"</code> works,
+  <code>cd C:\Users\jane\My Files\Email-Preflight</code> does not.</p>
+
+  <p><strong class="q">You are in a folder that contains only another folder of the same name</strong><br />
+  Some unzip tools nest the folder inside itself, so you end up with
+  <code>Email-Preflight/Email-Preflight/</code>. Go one level deeper. The correct folder is whichever
+  one directly contains <code>sfdx-project.json</code>.</p>
+
+  <p><strong class="q">You cannot see <code>sfdx-project.json</code> in the listing</strong><br />
+  You are in the wrong folder — most often one level too high, or still in Downloads. Being in the
+  wrong folder here is what makes Step 4 fail later with a confusing message about missing source, so
+  it is worth getting right before moving on.</p>
+
+  <p><strong class="q">You were sent the full project rather than the zip</strong><br />
+  Then the folder is called <code>emailPreflight</code> and contains extra developer files. Same
+  rule applies: the right folder is the one holding <code>sfdx-project.json</code>.</p>
+</div>
 
 <h3>Step 2 — Connect to your org</h3>
 
@@ -187,17 +277,21 @@ too high is the most common reason the deploy in Step 4 fails.</p>
 matching line:</p>
 
 <pre><code># Sandbox
-sf org login web --alias MyOrg --instance-url https://test.salesforce.com
+sf org login web --alias <span class="swap">MyOrg</span> --instance-url https://test.salesforce.com
 
 # Production or a developer org
-sf org login web --alias MyOrg --instance-url https://login.salesforce.com</code></pre>
+sf org login web --alias <span class="swap">MyOrg</span> --instance-url https://login.salesforce.com</code></pre>
+
+<p><span class="swap">MyOrg</span> is a nickname you are making up, not something to look up. Pick
+something you will recognise in a month. Filled in, the sandbox line looks like this:</p>
+
+<pre><code>sf org login web --alias mcn-uat --instance-url https://test.salesforce.com</code></pre>
 
 <p>A browser window opens. Log in with that org's credentials and it closes by itself.</p>
 
-<p>Replace <code>MyOrg</code> with a name you will recognise later. If your org uses a custom My
-Domain and neither URL above works, pass the domain straight in:</p>
+<p>If your org uses a custom My Domain and neither URL above works, pass the domain straight in:</p>
 
-<pre><code>sf org login web --alias MyOrg --instance-url https://your-domain.my.salesforce.com</code></pre>
+<pre><code>sf org login web --alias <span class="swap">MyOrg</span> --instance-url https://<span class="swap">your-domain</span>.my.salesforce.com</code></pre>
 
 <p>Then confirm it worked:</p>
 
@@ -206,20 +300,49 @@ Domain and neither URL above works, pass the domain straight in:</p>
 <p>Your alias should be listed with the right username. Read the username rather than glancing at
 it — if you have several orgs connected, deploying to the wrong one is the easy mistake to make.</p>
 
+<div class="stepfix">
+  <p><strong class="q">"sf is not recognised" / "command not found"</strong><br />
+  The Salesforce CLI is not installed, or the terminal was already open when it was installed. Close
+  the terminal, open a new one, and run <code>sf --version</code>. If that still fails, install the
+  CLI from <em>developer.salesforce.com/tools/salesforcecli</em> and open a fresh terminal afterwards.</p>
+
+  <p><strong class="q">The browser opens but login fails, or it says you are not authorised</strong><br />
+  Check you used the right URL for the kind of org — a sandbox will not accept
+  <code>login.salesforce.com</code>, and production will not accept <code>test.salesforce.com</code>.
+  This is the single most common cause and the error message does not say so.</p>
+
+  <p><strong class="q">It logged you into the wrong org</strong><br />
+  Your browser was already signed in to another org and reused that session. Run the command again in
+  a private or incognito window, or sign out of Salesforce in your browser first.</p>
+
+  <p><strong class="q">You already had this org connected under a different alias</strong><br />
+  Harmless — an org can have several aliases. Use whichever one <code>sf org list</code> shows against
+  the username you want.</p>
+</div>
+
 <h3>Step 3 — Run the tests <em>(optional)</em></h3>
 
-<p>Skip this if you just want it deployed. It is worth doing once if you have changed anything, or if
-you want to confirm the copy you were given is intact before it goes anywhere near an org.</p>
+<p><strong>Skip this unless you were given the full project.</strong> The packaged copy deliberately
+leaves the test suite out — it is not needed to run the tool, and it triples the download. If your
+folder has no <code>package.json</code> in it, there is nothing to run here; go to Step 4.</p>
+
+<p>With the full project, it is worth doing once if you have changed a rule, or to confirm the copy
+you were given is intact before it goes near an org.</p>
 
 <pre><code>npm install
 npm run test:unit</code></pre>
 
-<p>You should see <strong>511 passing tests across 3 suites</strong>, in about ten seconds. A failure
-here is a real bug in the rules, not a setup problem — nothing in the suite touches an org.</p>
+<p>You should see <strong>524 passing tests across 3 suites</strong>, in about fifteen seconds. A
+failure here is a real bug in the rules, not a setup problem — nothing in the suite touches an org,
+so it cannot be caused by anything about your environment or your login.</p>
 
 <h3>Step 4 — Deploy</h3>
 
-<pre><code>sf project deploy start --source-dir force-app --target-org MyOrg</code></pre>
+<pre><code>sf project deploy start --source-dir force-app --target-org <span class="swap">MyOrg</span></code></pre>
+
+<p>Use the same alias you chose in Step 2 — so with the example from earlier:</p>
+
+<pre><code>sf project deploy start --source-dir force-app --target-org mcn-uat</code></pre>
 
 <p>It takes under a minute and reports three components:</p>
 
@@ -252,9 +375,27 @@ explorer, and choose <strong>SFDX: Deploy Source to Org</strong>. That is a safe
 precisely because there is no Apex in this project — for a deployment containing Apex it would be the
 wrong tool, since it gives you no way to set a test level.</p>
 
+<div class="stepfix">
+  <p><strong class="q">"No source found" or "nothing to deploy"</strong><br />
+  You are not in the folder that holds <code>sfdx-project.json</code>. Go back to Step 1 — this is
+  what that check was for.</p>
+
+  <p><strong class="q">It deployed, but to the wrong org</strong><br />
+  The alias after <code>--target-org</code> did not match the one you meant. Run
+  <code>sf org list</code>, check the username, and deploy again with the right alias. No harm done:
+  deploying these three components changes nothing else in an org, and re-deploying simply overwrites.</p>
+
+  <p><strong class="q">"Value too long for field: Description"</strong><br />
+  You are deploying a modified copy. Shorten the <code>&lt;description&gt;</code> in
+  <code>emailPreflight.js-meta.xml</code> to under 255 characters.</p>
+
+  <p><strong class="q">It fails on Apex test failures</strong><br />
+  You are deploying to production. See the next section — this is expected and there is a way round it.</p>
+</div>
+
 <h3>Step 5 — Confirm it landed</h3>
 
-<pre><code>sf org open --target-org MyOrg --path lightning/setup/LightningComponentBundles/home</code></pre>
+<pre><code>sf org open --target-org <span class="swap">MyOrg</span> --path lightning/setup/LightningComponentBundles/home</code></pre>
 
 <p>You should see <strong>Email Preflight</strong> listed, along with <code>preflightEngine</code> and
 <code>qaCompare</code>. Those two being present but never showing up in the builder is correct — they
@@ -269,9 +410,17 @@ your deploy fails along with it — through no fault of the thing you are deploy
 <p>To avoid that, validate first and name a test class that already passes in that org, then release
 the validated deployment:</p>
 
-<pre><code>sf project deploy validate --source-dir force-app --target-org MyProdOrg --test-level RunSpecifiedTests --tests SomePassingTestClass --wait 60
+<pre><code>sf project deploy validate --source-dir force-app --target-org <span class="swap">MyOrg</span> --test-level RunSpecifiedTests --tests <span class="swap">SomePassingTestClass</span> --wait 60
 
-sf project deploy quick --use-most-recent --target-org MyProdOrg</code></pre>
+sf project deploy quick --use-most-recent --target-org <span class="swap">MyOrg</span></code></pre>
+
+<p>Filled in, that first line looks like this:</p>
+
+<pre><code>sf project deploy validate --source-dir force-app --target-org acme-prod --test-level RunSpecifiedTests --tests AccountTriggerTest --wait 60</code></pre>
+
+<p><span class="swap">SomePassingTestClass</span> is the one value here you cannot invent — it has to
+be a real Apex test class that currently passes in that org. If you do not know one, ask whoever
+maintains the org; "name me a test class that passes" is a quick question for them to answer.</p>
 
 <p>The first command is long, but keep it on one line — the character that splits a command across
 lines differs between PowerShell, Command Prompt and a Mac terminal, and getting it wrong is a more
@@ -305,13 +454,17 @@ email against a copy deck. Both are covered in the overview document.</p>
 
 <p>Replace the folder contents with the newer copy and run the same deploy command again:</p>
 
-<pre><code>sf project deploy start --source-dir force-app --target-org MyOrg</code></pre>
+<pre><code>sf project deploy start --source-dir force-app --target-org <span class="swap">MyOrg</span></code></pre>
 
 <p>Nothing needs uninstalling first, and there is no stored state to migrate — the panel keeps nothing
 between sessions. Anyone with the builder open should refresh the page afterwards, otherwise they will
 keep running the version their browser already loaded.</p>
 
 <h2>Troubleshooting</h2>
+
+<p>Problems that belong to one particular step are answered next to that step, since that is where
+you will be when you hit them — see the grey boxes under Steps 1, 2 and 4. What follows covers
+everything after the deploy.</p>
 
 <table>
   <tr>
@@ -320,12 +473,14 @@ keep running the version their browser already loaded.</p>
   </tr>
   <tr>
     <td>The deploy command is not recognised</td>
-    <td>The Salesforce CLI is not installed or not on your PATH. Check with <code>sf --version</code></td>
+    <td>The Salesforce CLI is not installed or not on your PATH. Check with <code>sf --version</code>,
+        and see the box under Step 2</td>
   </tr>
   <tr>
     <td>Deploy fails saying it cannot find the source</td>
-    <td>You are in the wrong folder. <code>cd</code> into the one containing
-        <code>sfdx-project.json</code> and try again</td>
+    <td>You are in the wrong folder. See the box under Step 1 — this is the most common early
+        problem, and the fix is to <code>cd</code> into the folder containing
+        <code>sfdx-project.json</code></td>
   </tr>
   <tr>
     <td>Deploy fails on test failures in production</td>
